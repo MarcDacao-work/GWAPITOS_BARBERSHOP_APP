@@ -2,11 +2,13 @@
 export const USER_ROLES = {
   CUSTOMER: 'customer',
   BARBER: 'barber',
-  ADMIN: 'admin',
+  ADMIN: 'admin'
 };
 
-export const ROLE_DISPLAY_NAMES = {
-  [USER_ROLES.CUSTOMER]: 'Customer',
-  [USER_ROLES.BARBER]: 'Barber',
-  [USER_ROLES.ADMIN]: 'Admin',
+export const ADMIN_PERMISSIONS = {
+  MANAGE_USERS: 'manage_users',
+  MANAGE_SCHEDULES: 'manage_schedules',
+  MANAGE_SERVICES: 'manage_services',
+  VIEW_ANALYTICS: 'view_analytics',
+  SYSTEM_SETTINGS: 'system_settings'
 };

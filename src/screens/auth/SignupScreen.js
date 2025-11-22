@@ -1,187 +1,282 @@
-// src/screens/auth/SignupScreen.js
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
-import Button from '../../../components/Button';
-import InputField from '../../../components/InputField';
-import { colors } from '../../../styles/colors';
-import { spacing } from '../../../styles/spacing';
-import { typography } from '../../../styles/typography';
-import { globalStyles } from '../../../styles/globalStyles';
-import { useAuth } from '../../../context/AuthContext';
-import { validation } from '../../../utils/validation';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Button from '../../components/Button';
+import InputField from '../../components/InputField';
+import { colors } from '../../styles/colors';
+import { spacing } from '../../styles/spacing';
+import { typography } from '../../styles/typography';
+import { globalStyles } from '../../styles/globalStyles';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import { useAuth } from '../../context/AuthContext';
 
 const SignupScreen = ({ navigation, route }) => {
-  const [formData, setFormData] = useState({
-    fullName: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-  });
-  const [errors, setErrors] = useState({});
-  const [loading, setLoading] = useState(false);
-  
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const { signup } = useAuth();
+  
   const selectedRole = route.params?.role || 'customer';
 
-  const handleInputChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    // Clear error when user starts typing
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }));
-    }
-  };
+ // screens/auth/SignupScreen.js - FIX NAVIGATION
+const handleSignup = async () => {
+  // Basic validation
+  if (!fullName || !email || !password || !confirmPassword) {
+    Alert.alert('Error', 'Please fill in all fields');
+    return;
+  }
 
-  const validateForm = () => {
-    const { isValid, errors: validationErrors } = validation.validateSignup(formData);
-    setErrors(validationErrors);
-    return isValid;
-  };
+  if (password !== confirmPassword) {
+    Alert.alert('Error', 'Passwords do not match');
+    return;
+  }
 
-  const handleSignup = async () => {
-    if (!validateForm()) return;
+  if (password.length < 6) {
+    Alert.alert('Error', 'Password must be at least 6 characters long');
+    return;
+  }
 
-    setLoading(true);
-    
-    try {
-      const { data, error } = await signup(
-        formData.email, 
-        formData.password, 
-        formData.fullName, 
-        selectedRole
-      );
+  setIsLoading(true);
+  
+  try {
+    const result = await signup(email, password, {
+      fullName,
+      role: selectedRole
+    });
 
-      if (error) {
-        Alert.alert('Signup Error', error);
-        return;
-      }
+    console.log('Signup result in screen:', result);
 
-      if (data?.user) {
+    if (result.success) {
+      if (result.needsConfirmation) {
         Alert.alert(
-          'Success', 
-          'Account created successfully! Please check your email for verification.',
+          'Check Your Email', 
+          'A confirmation email has been sent to your email address. Please verify your email before logging in.',
           [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
         );
+      } else {
+        console.log('Navigation with user:', result.user);
+        // The navigation will happen automatically via AuthContext state change
+        // No need to navigate manually here
       }
-    } catch (error) {
-      Alert.alert('Error', 'An unexpected error occurred');
-    } finally {
-      setLoading(false);
+    } else {
+      Alert.alert('Signup Failed', result.error);
+    }
+  } catch (error) {
+    Alert.alert('Error', 'An unexpected error occurred');
+    console.error('Signup error:', error);
+  } finally {
+    setIsLoading(false);
+  }
+};
+
+  // ... rest of your component remains the same
+  const getRoleIcon = () => {
+    switch (selectedRole) {
+      case 'barber': return 'cut';
+      case 'admin': return 'settings';
+      default: return 'person';
     }
   };
 
   return (
-    <View style={globalStyles.container}>
-      <ScrollView 
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
+    <SafeAreaView style={globalStyles.container}>
+      <KeyboardAvoidingView 
+        style={styles.keyboardAvoid}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <View style={styles.header}>
-          <Text style={styles.title}>Create Account</Text>
-          <Text style={styles.subtitle}>
-            Sign up as a {selectedRole}
-          </Text>
-        </View>
+        <ScrollView 
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Header Section */}
+          <View style={styles.header}>
+            <TouchableOpacity 
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
+            >
+              <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
+            </TouchableOpacity>
+            <View style={styles.headerContent}>
+              <View style={styles.roleBadge}>
+                <Ionicons name={getRoleIcon()} size={24} color={colors.primary} />
+                <Text style={styles.roleText}>{selectedRole.toUpperCase()}</Text>
+              </View>
+              <Text style={styles.title}>Create Account</Text>
+              <Text style={styles.subtitle}>
+                Join GWAPITOS as a {selectedRole}
+              </Text>
+            </View>
+          </View>
 
-        <View style={styles.form}>
-          <InputField
-            label="Full Name"
-            placeholder="Enter your full name"
-            value={formData.fullName}
-            onChangeText={(value) => handleInputChange('fullName', value)}
-            autoCapitalize="words"
-            error={errors.fullName}
-          />
-          <InputField
-            label="Email"
-            placeholder="Enter your email"
-            value={formData.email}
-            onChangeText={(value) => handleInputChange('email', value)}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            error={errors.email}
-          />
-          <InputField
-            label="Password"
-            placeholder="Create a password"
-            value={formData.password}
-            onChangeText={(value) => handleInputChange('password', value)}
-            secureTextEntry
-            error={errors.password}
-          />
-          <InputField
-            label="Confirm Password"
-            placeholder="Confirm your password"
-            value={formData.confirmPassword}
-            onChangeText={(value) => handleInputChange('confirmPassword', value)}
-            secureTextEntry
-            error={errors.confirmPassword}
-          />
-        </View>
-      </ScrollView>
+          {/* Form Section */}
+          <View style={styles.form}>
+            <InputField
+              label="Full Name"
+              placeholder="Enter your full name"
+              value={fullName}
+              onChangeText={setFullName}
+              autoCapitalize="words"
+              autoComplete="name"
+            />
+            <InputField
+              label="Email Address"
+              placeholder="Enter your email"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+            />
+            <InputField
+              label="Password"
+              placeholder="Create a strong password (min. 6 characters)"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+            />
+            <InputField
+              label="Confirm Password"
+              placeholder="Re-enter your password"
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry
+            />
+          </View>
 
-      <View style={styles.footer}>
-        <Button
-          title={loading ? "Creating Account..." : "Create Account"}
-          onPress={handleSignup}
-          variant="primary"
-          disabled={loading}
-        />
-        <View style={styles.loginContainer}>
-          <Text style={styles.loginText}>Already have an account? </Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-            <Text style={styles.loginLink}>Sign In</Text>
-          </TouchableOpacity>
+          {/* Terms Agreement */}
+          <View style={styles.termsContainer}>
+            <Text style={styles.termsText}>
+              By creating an account, you agree to our{' '}
+              <Text style={styles.termsLink}>Terms of Service</Text> and{' '}
+              <Text style={styles.termsLink}>Privacy Policy</Text>
+            </Text>
+          </View>
+        </ScrollView>
+
+        {/* Footer Actions */}
+        <View style={styles.footer}>
+          <Button
+            title="Create Account"
+            onPress={handleSignup}
+            variant="primary"
+            loading={isLoading}
+          />
+          <View style={styles.loginContainer}>
+            <Text style={styles.loginText}>Already have an account? </Text>
+            <TouchableOpacity 
+              onPress={() => navigation.navigate('Login')}
+              style={styles.loginLink}
+            >
+              <Text style={styles.loginLinkText}>Sign In</Text>
+              <Ionicons name="log-in" size={16} color={colors.accent} />
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
-    </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
+// ... keep your existing styles
 const styles = StyleSheet.create({
+  keyboardAvoid: {
+    flex: 1,
+  },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.lg,
     paddingTop: spacing.xl,
   },
   header: {
+    marginBottom: spacing.xxl,
+  },
+  backButton: {
+    alignSelf: 'flex-start',
+    padding: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  headerContent: {
     alignItems: 'center',
-    marginBottom: spacing.xl,
+  },
+  roleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: `${colors.primary}15`,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: 20,
+    marginBottom: spacing.lg,
+  },
+  roleText: {
+    color: colors.primary,
+    fontSize: typography.caption.fontSize,
+    fontWeight: '700',
+    marginLeft: spacing.xs,
+    textTransform: 'uppercase',
   },
   title: {
     fontSize: typography.h1.fontSize,
-    fontWeight: 'bold',
+    fontWeight: '800',
     color: colors.text.primary,
     marginBottom: spacing.sm,
+    textAlign: 'center',
   },
   subtitle: {
     fontSize: typography.body.fontSize,
     color: colors.text.secondary,
     textAlign: 'center',
+    lineHeight: typography.body.lineHeight,
   },
   form: {
-    marginBottom: spacing.lg,
+    marginBottom: spacing.xl,
+  },
+  termsContainer: {
+    marginBottom: spacing.xl,
+    padding: spacing.md,
+    backgroundColor: `${colors.primary}08`,
+    borderRadius: 12,
+  },
+  termsText: {
+    fontSize: typography.caption.fontSize,
+    color: colors.text.secondary,
+    textAlign: 'center',
+    lineHeight: typography.caption.lineHeight,
+  },
+  termsLink: {
+    color: colors.accent,
+    fontWeight: '600',
   },
   footer: {
-    padding: spacing.md,
+    padding: spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: colors.border.light,
+    backgroundColor: colors.background,
   },
   loginContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: spacing.md,
+    alignItems: 'center',
+    marginTop: spacing.lg,
   },
   loginText: {
     color: colors.text.secondary,
     fontSize: typography.body.fontSize,
   },
   loginLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  loginLinkText: {
     color: colors.accent,
     fontSize: typography.body.fontSize,
-    fontWeight: '600',
+    fontWeight: '700',
+    marginRight: spacing.xs,
   },
 });
 

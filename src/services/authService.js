@@ -1,152 +1,177 @@
-// src/services/authService.js
+// services/authService.js
 import { supabase } from '../config/supabase';
 
-export const authService = {
-  // Sign up new user
-  async signUp(email, password, fullName, role) {
+const authService = {
+  // Sign in function
+  signin: async (email, password) => {
     try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: email.trim().toLowerCase(),
-        password: password,
-        options: {
-          data: {
-            full_name: fullName,
-            role: role,
-          },
-        },
-      });
-
-      if (authError) throw authError;
-
-      // Create user profile
-      if (authData.user) {
-        const { error: profileError } = await this.createUserProfile(
-          authData.user.id,
-          email,
-          fullName,
-          role
-        );
-
-        if (profileError) throw profileError;
-      }
-
-      return { data: authData, error: null };
-    } catch (error) {
-      return { data: null, error: error.message };
-    }
-  },
-
-  // Sign in user
-  async signIn(email, password) {
-    try {
+      console.log('Signing in with:', email);
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
-        password: password,
+        password,
       });
 
-      if (error) throw error;
-      return { data, error: null };
+      if (error) {
+        console.error('Signin error:', error);
+        throw error;
+      }
+      
+      console.log('Signin successful:', data.user?.id);
+      return data;
     } catch (error) {
-      return { data: null, error: error.message };
+      console.error('Auth service signin error:', error);
+      throw error;
     }
   },
 
-  // Sign out user
-  async signOut() {
+  // Sign up function
+// services/authService.js
+signup: async (email, password, userData) => {
+  try {
+    console.log('Signing up with:', email, userData);
+    
+    // Wait to avoid rate limiting
+    console.log('Waiting 16 seconds to avoid rate limiting...');
+    await new Promise(resolve => setTimeout(resolve, 16000));
+    
+    // Create auth user - the trigger will automatically create the profile
+    const { data, error } = await supabase.auth.signUp({
+      email: email.trim().toLowerCase(),
+      password,
+      options: {
+        data: {
+          full_name: userData.fullName,
+          role: userData.role
+        }
+      }
+    });
+
+    if (error) {
+      console.error('Signup auth error:', error);
+      throw error;
+    }
+
+    console.log('Auth user created:', data.user?.id);
+
+    // Wait a moment for the trigger to create the profile
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // Try to get the profile to verify it was created
+    if (data.user) {
+      try {
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', data.user.id)
+          .single();
+
+        if (profileError) {
+          console.log('Profile not immediately available (this is normal):', profileError);
+        } else {
+          console.log('Profile found:', profile);
+        }
+      } catch (e) {
+        console.log('Profile check failed (normal during signup):', e.message);
+      }
+    }
+
+    console.log('Signup process completed successfully');
+    return data;
+  } catch (error) {
+    console.error('Auth service signup error:', error);
+    throw error;
+  }
+},
+
+// Update getUserProfile to use the function if needed
+// services/authService.js - KEEP ONLY ONE VERSION
+getUserProfile: async (userId) => {
+  try {
+    console.log('Fetching profile for user:', userId);
+    
+    // Try multiple approaches to get the profile
+    let profile = null;
+    
+    // Approach 1: Direct query
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (!error && data) {
+      console.log('Profile found via direct query:', data);
+      return data;
+    }
+
+    console.log('Direct query failed, trying RPC function...');
+    
+    // Approach 2: RPC function if exists
+    try {
+      const { data: funcData, error: funcError } = await supabase.rpc('get_user_profile', { 
+        user_id: userId 
+      });
+      
+      if (!funcError && funcData && funcData.length > 0) {
+        console.log('Profile found via RPC:', funcData[0]);
+        return funcData[0];
+      }
+    } catch (rpcError) {
+      console.log('RPC function not available:', rpcError.message);
+    }
+
+    // Approach 3: Wait and retry
+    console.log('Profile not found, waiting and retrying...');
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    const { data: retryData, error: retryError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (!retryError && retryData) {
+      console.log('Profile found after retry:', retryData);
+      return retryData;
+    }
+
+    console.log('No profile found after all attempts');
+    return null;
+    
+  } catch (error) {
+    console.error('Error in getUserProfile:', error);
+    return null;
+  }
+},
+  // Sign out function
+  signOut: async () => {
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-      return { error: null };
     } catch (error) {
-      return { error: error.message };
+      throw error;
+    }
+  },
+
+  // Get current user
+  getCurrentUser: async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      return session;
+    } catch (error) {
+      throw error;
     }
   },
 
   // Reset password
-  async resetPassword(email) {
+  resetPassword: async (email) => {
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email);
       if (error) throw error;
-      return { error: null };
     } catch (error) {
-      return { error: error.message };
+      throw error;
     }
-  },
-
-  // Create user profile
-  async createUserProfile(userId, email, fullName, role) {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .insert([
-          {
-            id: userId,
-            email: email,
-            full_name: fullName,
-            role: role,
-          },
-        ])
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      // Create role-specific record
-      await this.createRoleSpecificProfile(userId, role);
-
-      return { data, error: null };
-    } catch (error) {
-      return { data: null, error: error.message };
-    }
-  },
-
-  // Create role-specific profile
-  async createRoleSpecificProfile(userId, role) {
-    const tableName = role === 'barber' ? 'barbers' : 
-                     role === 'admin' ? 'admins' : 'customers';
-    
-    try {
-      const { error } = await supabase
-        .from(tableName)
-        .insert([{ id: userId }]);
-
-      if (error) throw error;
-      return { error: null };
-    } catch (error) {
-      return { error: error.message };
-    }
-  },
-
-  // Get user profile
-  async getUserProfile(userId) {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      if (error) throw error;
-      return { data, error: null };
-    } catch (error) {
-      return { data: null, error: error.message };
-    }
-  },
-
-  // Update user profile
-  async updateUserProfile(userId, updates) {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .update(updates)
-        .eq('id', userId)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return { data, error: null };
-    } catch (error) {
-      return { data: null, error: error.message };
-    }
-  },
+  }
 };
+
+export default authService;
