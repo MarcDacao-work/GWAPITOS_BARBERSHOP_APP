@@ -1,0 +1,293 @@
+🚀 2-Day Development Flow for QR-Based Barbershop Booking System
+📅 DAY 1: FOUNDATION + CORE FLOW
+Morning (9AM-12PM): SETUP & AUTH
+Project Setup (1 hour)
+
+Create Expo project with TypeScript
+
+Install Supabase and dependencies
+
+Set up navigation structure (Stack + Tab)
+
+Authentication System (2 hours)
+
+Supabase Auth setup (signup/login)
+
+Two user types: Customer vs Barber
+
+Profile creation after signup
+
+Afternoon (1PM-6PM): BOOKING SYSTEM
+Database Schema (1 hour)
+
+Create Supabase tables: profiles, barbers, appointments
+
+Add QR code field to appointments
+
+Customer Booking Flow (3 hours)
+
+Home screen: "Book Now" button
+
+Barber selection screen
+
+Date/time picker
+
+Confirmation screen with QR code generation
+
+Save to database
+
+Basic Barber Dashboard (1 hour)
+
+Today's appointments list
+
+Simple "Mark as done" button
+
+📅 DAY 2: QR SYSTEM + IOT SIMULATION
+Morning (9AM-12PM): QR SYSTEM
+QR Code Implementation (2 hours)
+
+Install react-native-qrcode-svg
+
+Generate unique QR for each appointment (appointment_id + timestamp)
+
+Customer: View QR in "My Appointments"
+
+Add "Check In" button for manual alternative
+
+QR Scanner for Barbers (1 hour)
+
+Install expo-barcode-scanner
+
+Barber screen: "Scan QR" button
+
+On scan: Validate → Mark as arrived → Update queue
+
+Queue Management (1 hour)
+
+Real-time queue using Supabase Realtime
+
+Simple "Now Serving" and "Next Up" logic
+
+Afternoon (1PM-7PM): IOT SIMULATION & POLISH
+IoT Control Panel (2 hours)
+
+Create "Barber Control Panel" screen:
+
+Big buttons: "Call Next", "Complete", "Break"
+
+Station status indicators
+
+Live queue display
+
+Add haptic feedback for button presses
+
+Queue Display Screen (1 hour)
+
+Public-facing screen (simulated wall display)
+
+Large text: "Now Serving: Customer Name"
+
+Estimated wait times
+
+Auto-refresh every 30 seconds
+
+Notifications & Polish (2 hours)
+
+Push notifications for customers:
+
+"You're next in line"
+
+"Your barber is ready"
+
+Payment toggle (simple "Mark as Paid")
+
+Fix UI/UX issues
+
+Test complete flow
+
+Final Testing & Deployment Prep (1 hour)
+
+Test full flow: Book → Check-in → Queue → Complete → Pay
+
+Build APK/IPA for presentation
+
+Prepare quick demo script
+
+🔄 COMPLETE USER FLOW TO IMPLEMENT
+Customer Flow:
+Sign up → Choose "Customer"
+
+Browse barbers → Select date/time
+
+Confirm booking → Get QR code
+
+Arrive at shop → Show QR code OR tap "Check In"
+
+Wait in virtual queue (see position)
+
+Get notified when barber is ready
+
+Get haircut → Barbers marks "Complete"
+
+Pay via app (toggle) → Done
+
+Barber Flow:
+Sign up → Choose "Barber"
+
+View dashboard → Today's appointments
+
+Scan customer QR code OR manually check them in
+
+Use Control Panel to manage queue:
+
+"Call Next" → Notifies customer
+
+"Complete" → Moves to payment
+
+"Break" → Pauses queue
+
+View queue display (simulated IoT screen)
+
+Mark payment received
+
+🎯 CRITICAL COMPONENTS TO BUILD
+Day 1 Components:
+AuthScreen - Signup/Login
+
+HomeScreen - Role-based landing
+
+BookAppointmentScreen - Booking flow
+
+BarberDashboard - Basic appointment list
+
+AppointmentConfirmation - Shows QR code
+
+Day 2 Components:
+QRScannerScreen - Barber scans QR
+
+QueueDisplayScreen - Public queue view
+
+BarberControlPanel - IoT simulation buttons
+
+CustomerQueueScreen - Customer's queue status
+
+PaymentScreen - Simple payment toggle
+
+⚡ PRO TIPS FOR 2-DAY RUSH
+Cut Corners Here:
+Skip email verification
+
+Use mock barber data if needed
+
+Simple UI (no animations)
+
+No actual payment gateway (just toggle)
+
+Skip "Forgot Password" (add placeholder)
+
+Must-Have Features:
+QR code generation & scanning
+
+Real-time queue updates
+
+Role-based navigation
+
+Basic appointment CRUD
+
+Simulated IoT control panel
+
+Nice-to-Have (If Time):
+Push notifications
+
+Sound effects for IoT buttons
+
+Estimated wait time calculator
+
+Multiple barber stations
+
+📱 SCREEN FLOW ARCHITECTURE
+text
+Auth Stack:
+  Login → Signup → Create Profile
+
+Customer Tab Navigator:
+  Home → Book → My Appointments → Queue Status
+
+Barber Tab Navigator:
+  Dashboard → Scan QR → Control Panel → Queue Display
+
+Shared:
+  QR Scanner (modal)
+  Payment Screen
+🚨 TIME MANAGEMENT WARNINGS
+Day 1 Risk: Authentication takes longer than expected
+
+Solution: Use Supabase Magic Links or skip signup for demo
+
+Day 2 Risk: QR scanner permissions/issues
+
+Solution: Have manual check-in as backup
+
+Biggest Risk: Real-time queue sync complexity
+
+Solution: Use simple polling if realtime fails
+
+✅ SUCCESS METRICS FOR 2 DAYS
+By end of Day 2, you should have:
+
+✅ Customer can book & get QR code
+
+✅ Barber can scan QR & check in customer
+
+✅ Queue updates in real-time
+
+✅ Barber can mark haircut complete
+
+✅ Customer can "pay"
+
+✅ Simulated IoT control panel works
+
+✅ Basic queue display visible
+
+🆘 EMERGENCY PLAN
+If running out of time:
+
+Drop payment feature
+
+Skip multiple barber stations
+
+Use simple list instead of real-time queue
+
+Hardcode QR data instead of generating
+
+---
+### ✅ Achievements Today (quick summary)
+
+- 🔧 Core Booking UI: Implemented the full customer booking flow UI — `BookAppointmentScreen.js` (select barber, service, date, time) and confirmation navigation.
+- 🆗 Appointment Confirmation + QR: Confirmation screen generates and displays a QR code, includes share and instructions (`AppointmentConfirmationScreen.js` — uses `react-native-qrcode-svg`).
+- 🧾 Payment Mock: Payment screen with "Mark as Paid" toggle, receipt mock and payment actions (`PaymentScreen.js`).
+- 🎛 Barber Control Panel: Interactive control panel with Call Next / Complete / Break / Emergency / Add Walk-in and local queue management (`BarberControlPanel.js`).
+- 📺 Queue Display (IoT simulation): Public-facing display that shows Now Serving / Next Up and auto-refresh behavior (`QueueDisplayScreen.js`).
+- ⚙️ Supabase client: Supabase client file exists and is ready to be used for persistence (`src/services/supabase.js`).
+- 📱 QR Scanner (scaffold): `QRScannerScreen.js` scaffolded as placeholder — ready to integrate `expo-barcode-scanner` for scanning and validation.
+
+Short note: Most features are implemented as UI and local/mock-data flows (see `src/utils/mockData.js`). To go fully live you should integrate Supabase for persistence and realtime updates.
+
+### Day 2 Items — Current Status
+
+- QR Code Implementation: ✅ Done — QR is generated in confirmation screen and is shareable.
+- QR Scanner for Barbers: 🟡 Partially done — scanner screen exists; needs `expo-barcode-scanner` integration and validation logic.
+- Queue Management: ✅ UI implemented with mock queue; needs backend sync (Supabase) for realtime.
+- Barber Control Panel: ✅ Done (UI + local queue logic).
+- Queue Display Screen: ✅ Done (auto-refresh local demo).
+- IoT Control Panel (simulated): ✅ Done via Barber Control Panel interactions.
+- Notifications & Payment Toggle: 🟡 Partially done — payment UI exists; push notifications not implemented.
+
+### Next Small Polishing Tasks (recommended)
+
+- Integrate `expo-barcode-scanner` in `QRScannerScreen.js` and validate scanned QR against appointment IDs.
+- Hook booking & appointments to Supabase (`src/services/supabase.js`) to persist data and enable realtime queue updates.
+- Replace mock queue (`src/utils/mockData.js`) with live queries and Supabase Realtime subscriptions or lightweight polling.
+- Add UX polish: success toasts, network error handling, and guard rails for empty selections.
+
+---
