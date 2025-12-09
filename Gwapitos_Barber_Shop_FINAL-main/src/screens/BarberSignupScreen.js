@@ -51,7 +51,7 @@ const BarberSignupScreen = ({ navigation }) => {
 
   setLoading(true);
   try {
-    // SIGN UP with EXPLICIT role
+    // SIGN UP with EXPLICIT role in both places
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: formData.email.trim(),
       password: formData.password,
@@ -59,25 +59,22 @@ const BarberSignupScreen = ({ navigation }) => {
         data: {
           full_name: formData.fullName.trim(),
           phone: formData.phone.trim() || null,
-          role: 'barber' // Make sure this is exactly 'barber'
+          role: 'barber' // Make sure this is 'barber' exactly
         }
       }
     });
 
     if (authError) throw authError;
 
-    // Wait for auth to complete
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
     // Get the user
     const { data: { user } } = await supabase.auth.getUser();
     
     if (!user) throw new Error('User not created');
 
-    // CREATE PROFILE with the SAME role
+    // CREATE PROFILE with the SAME role - Use upsert to handle duplicates
     const { error: profileError } = await supabase
       .from('profiles')
-      .upsert({ // Use upsert instead of insert
+      .upsert({
         auth_id: user.id,
         email: formData.email.trim(),
         full_name: formData.fullName.trim(),
@@ -88,12 +85,12 @@ const BarberSignupScreen = ({ navigation }) => {
         years_experience: parseInt(formData.yearsExperience) || null,
         bio: formData.bio.trim() || null
       }, {
-        onConflict: 'auth_id' // Handle if profile already exists
+        onConflict: 'auth_id',
+        ignoreDuplicates: false
       });
 
     if (profileError) {
       console.log('Profile error (non-critical):', profileError.message);
-      // Don't throw, just log
     }
 
     // Sign out so user has to sign in
@@ -102,7 +99,7 @@ const BarberSignupScreen = ({ navigation }) => {
     // Navigate to SignIn with success message
     Alert.alert(
       'Success!',
-      'Barber account created successfully! Please sign in.',
+      'Barber account created successfully! Please sign in to access your dashboard.',
       [
         {
           text: 'Sign In',

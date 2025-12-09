@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TextInput, TouchableOpacity, 
   Alert, KeyboardAvoidingView, Platform, ActivityIndicator 
 } from 'react-native';
-import { SafeAreaView } from 'react-native'; // UPDATED
+import { SafeAreaView } from 'react-native';
 import { Ionicons as Icon } from '@expo/vector-icons';
 import { supabase } from '../services/supabase';
 import { setLastError } from '../utils/errorStore';
@@ -56,22 +56,37 @@ const SignInScreen = ({ navigation, route }) => {
       
       // Get user role after successful login
       if (data?.user) {
+        // Get profile from database
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('role, full_name')
           .eq('auth_id', data.user.id)
-          .single();
+          .maybeSingle();
         
-        if (profileError) {
-          console.log('Profile fetch error (non-critical):', profileError.message);
+        let userRole = 'customer';
+        let userName = email.split('@')[0];
+        
+        if (!profileError && profile) {
+          userRole = profile.role || 'customer';
+          userName = profile.full_name || userName;
+        } else {
+          // Check metadata if no profile
+          userRole = data.user.user_metadata?.role || 'customer';
+          userName = data.user.user_metadata?.full_name || userName;
         }
         
-        const userRole = profile?.role || 'customer';
-        const userName = profile?.full_name || email.split('@')[0];
+        console.log('👤 Detected role:', userRole);
+        console.log('👤 Detected name:', userName);
         
-        Alert.alert('Success!', `Welcome back, ${userName}! You're signed in as a ${userRole}.`);
+        // Show appropriate welcome message WITHOUT mentioning role
+        Alert.alert(
+          'Success!', 
+          `Welcome back, ${userName}!`,
+          [{ text: 'OK' }]
+        );
         
         // The auth state change in MainNavigator will handle navigation
+        // No need to navigate manually
       }
     } catch (error) {
       console.error('Full sign in error:', {
@@ -117,7 +132,7 @@ const SignInScreen = ({ navigation, route }) => {
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: 'http://localhost:3000/reset-password', // Update with your actual redirect URL
+        redirectTo: 'http://localhost:3000/reset-password',
       });
       
       if (error) throw error;

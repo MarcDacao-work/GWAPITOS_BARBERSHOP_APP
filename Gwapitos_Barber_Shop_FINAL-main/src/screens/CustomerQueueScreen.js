@@ -11,21 +11,26 @@ import {
   RefreshControl
 } from 'react-native';
 import { Ionicons as Icon } from '@expo/vector-icons';
-import { mockQueue, mockAppointments } from '../utils/mockData';
+import { mockQueue } from '../utils/mockData';
 import { supabase } from '../services/supabase';
+import { getCustomerAppointments, seedSampleData } from '../utils/appointmentsStore'; // ADD THIS IMPORT
+import { ActivityIndicator } from 'react-native';
 
 const CustomerQueueScreen = ({ navigation }) => {
   const [queue, setQueue] = useState(mockQueue);
-  const [userAppointment, setUserAppointment] = useState(mockAppointments[0]);
+  const [userAppointment, setUserAppointment] = useState(null); // CHANGE FROM mockAppointments[0] TO null
   const [refreshing, setRefreshing] = useState(false);
   const [userPosition, setUserPosition] = useState(3); // Simulated user position
   const [estimatedWait, setEstimatedWait] = useState('45 min');
-  const [userName, setUserName] = useState('Customer'); // Add this line
+  const [userName, setUserName] = useState('Customer');
+  const [loading, setLoading] = useState(true); // ADD LOADING STATE
 
   useEffect(() => {
-    fetchUserProfile(); // Add this line
+    fetchUserProfile();
+    fetchUserAppointment();
   }, []);
 
+  // Update fetchUserProfile to also fetch appointments
   const fetchUserProfile = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -38,17 +43,8 @@ const CustomerQueueScreen = ({ navigation }) => {
         
         if (profile?.full_name) {
           setUserName(profile.full_name);
-          
-          // Update mock queue with user's name
-          const updatedQueue = [...mockQueue];
-          const userIndex = updatedQueue.findIndex(item => item.position === userPosition);
-          if (userIndex !== -1) {
-            updatedQueue[userIndex] = {
-              ...updatedQueue[userIndex],
-              customerName: profile.full_name
-            };
-            setQueue(updatedQueue);
-          }
+        } else {
+          setUserName(user.email?.split('@')[0] || 'Customer');
         }
       }
     } catch (error) {
@@ -56,14 +52,93 @@ const CustomerQueueScreen = ({ navigation }) => {
     }
   };
 
-  const onRefresh = () => {
+  // NEW FUNCTION: Fetch the user's actual appointment
+  const fetchUserAppointment = async () => {
+    try {
+      setLoading(true);
+      
+      // Seed sample data if empty
+      await seedSampleData();
+      
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('auth_id', user.id)
+          .single();
+        
+        let customerName = profile?.full_name || user.email?.split('@')[0] || 'Customer';
+        
+        // Get user's appointments
+        const customerAppointments = await getCustomerAppointments(customerName);
+        
+        if (customerAppointments.length > 0) {
+          // Get the most recent confirmed/upcoming appointment
+          const upcomingAppointments = customerAppointments.filter(app => 
+            app.status === 'confirmed' || app.status === 'upcoming'
+          );
+          
+          if (upcomingAppointments.length > 0) {
+            // Sort by date (Today > Tomorrow > other dates)
+            const sortedAppointments = upcomingAppointments.sort((a, b) => {
+              const dateOrder = { 'Today': 1, 'Tomorrow': 2 };
+              const aOrder = dateOrder[a.date] || 3;
+              const bOrder = dateOrder[b.date] || 3;
+              return aOrder - bOrder;
+            });
+            
+            setUserAppointment(sortedAppointments[0]);
+          } else {
+            // Use the most recent appointment if no upcoming ones
+            setUserAppointment(customerAppointments[0]);
+          }
+        } else {
+          // If no appointments, create a default one for display
+          setUserAppointment({
+            id: 'default',
+            barberName: 'No Barber Selected',
+            service: 'No Service Booked',
+            date: 'No Date',
+            time: 'No Time',
+            status: 'pending',
+            duration: 'N/A',
+            qrData: 'NO-APPOINTMENT'
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching user appointment:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onRefresh = async () => {
     setRefreshing(true);
-    // Simulate API call
+    // Fetch updated appointment data
+    await fetchUserAppointment();
+    // Simulate queue refresh
     setTimeout(() => {
       setRefreshing(false);
       Alert.alert('Refreshed', 'Queue information updated');
-    }, 1500);
+    }, 1000);
   };
+
+  // Update queue with user's actual name
+  useEffect(() => {
+    if (userName && userName !== 'Customer') {
+      const updatedQueue = [...queue];
+      const userIndex = updatedQueue.findIndex(item => item.position === userPosition);
+      if (userIndex !== -1) {
+        updatedQueue[userIndex] = {
+          ...updatedQueue[userIndex],
+          customerName: userName
+        };
+        setQueue(updatedQueue);
+      }
+    }
+  }, [userName]);
 
   const handleCheckIn = () => {
     Alert.alert(
@@ -105,6 +180,19 @@ const CustomerQueueScreen = ({ navigation }) => {
 
   const userInQueue = queue.find(customer => customer.position === userPosition);
 
+  // If still loading, show loading screen
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" backgroundColor="#1a1a1a" />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#FFD700" />
+          <Text style={styles.loadingText}>Loading appointment...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#1a1a1a" />
@@ -133,52 +221,72 @@ const CustomerQueueScreen = ({ navigation }) => {
           />
         }
       >
-        {/* Appointment Card - UPDATED */}
+        {/* Appointment Card - NOW SHOWS ACTUAL APPOINTMENT */}
         <View style={styles.appointmentCard}>
-  <View style={styles.appointmentHeader}>
-    <Icon name="calendar-outline" size={24} color="#FFD700" />
-    <Text style={styles.appointmentTitle}>Your Appointment</Text>
-  </View>
-  
-  <View style={styles.appointmentDetails}>
-    <View style={styles.detailRow}>
-      <Text style={styles.detailLabel}>Customer:</Text>
-      <Text style={styles.detailValue}>{userName || 'Customer'}</Text>
-    </View>
+          <View style={styles.appointmentHeader}>
+            <Icon name="calendar-outline" size={24} color="#FFD700" />
+            <Text style={styles.appointmentTitle}>Your Appointment</Text>
+          </View> 
+          <View style={styles.appointmentDetails}>
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Customer:</Text>
+              <Text style={styles.detailValue}>{userName || 'Customer'}</Text>
+            </View>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Barber:</Text>
-              <Text style={styles.detailValue}>{userAppointment.barberName}</Text>
+              <Text style={styles.detailValue}>
+                {userAppointment?.barber?.name || userAppointment?.barberName || 'Not Selected'}
+              </Text>
             </View>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Service:</Text>
-              <Text style={styles.detailValue}>{userAppointment.service}</Text>
+              <Text style={styles.detailValue}>
+                {userAppointment?.services?.[0]?.name || userAppointment?.service || 'Not Selected'}
+              </Text>
             </View>
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Time:</Text>
+              <Text style={styles.detailLabel}>Date & Time:</Text>
               <Text style={styles.detailValue}>
-                {userAppointment.date}, {userAppointment.time}
+                {userAppointment?.date || 'No Date'}, {userAppointment?.time || 'No Time'}
               </Text>
             </View>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Status:</Text>
               <View style={[
                 styles.statusBadge,
-                { backgroundColor: userAppointment.status === 'confirmed' ? '#4CAF50' : '#FF9800' }
+                { 
+                  backgroundColor: userAppointment?.status === 'confirmed' ? '#4CAF50' : 
+                                  userAppointment?.status === 'upcoming' ? '#FF9800' : 
+                                  userAppointment?.status === 'completed' ? '#9E9E9E' : '#888'
+                }
               ]}>
                 <Text style={styles.statusText}>
-                  {userAppointment.status.toUpperCase()}
+                  {userAppointment?.status?.toUpperCase() || 'PENDING'}
                 </Text>
               </View>
             </View>
           </View>
 
-          <TouchableOpacity style={styles.qrButton} onPress={() => navigation.navigate('AppointmentConfirmation')}>
+          <TouchableOpacity 
+            style={styles.qrButton} 
+            onPress={() => {
+              if (userAppointment?.id !== 'default') {
+                navigation.navigate('AppointmentConfirmation', {
+                  appointment: userAppointment
+                });
+              } else {
+                Alert.alert('No Appointment', 'Please book an appointment first');
+              }
+            }}
+          >
             <Icon name="qr-code-outline" size={20} color="#2196F3" />
-            <Text style={styles.qrButtonText}>View QR Code</Text>
+            <Text style={styles.qrButtonText}>
+              {userAppointment?.id !== 'default' ? 'View QR Code' : 'Book Appointment'}
+            </Text>
           </TouchableOpacity>
         </View>
 
-        {/* Check In Section - UPDATED */}
+        {/* Check In Section */}
         {!userInQueue ? (
           <View style={styles.checkInCard}>
             <Icon name="location-outline" size={40} color="#FFD700" />
@@ -186,13 +294,25 @@ const CustomerQueueScreen = ({ navigation }) => {
             <Text style={styles.checkInText}>
               Hi {userName}, are you at the barbershop? Check in to join the virtual queue.
             </Text>
-            <TouchableOpacity style={styles.checkInButton} onPress={handleCheckIn}>
+            <TouchableOpacity 
+              style={[
+                styles.checkInButton,
+                userAppointment?.id === 'default' && styles.disabledButton
+              ]} 
+              onPress={handleCheckIn}
+              disabled={userAppointment?.id === 'default'}
+            >
               <Icon name="log-in-outline" size={20} color="#fff" />
               <Text style={styles.checkInButtonText}>CHECK IN NOW</Text>
             </TouchableOpacity>
+            {userAppointment?.id === 'default' && (
+              <Text style={styles.warningText}>
+                Please book an appointment first before checking in
+              </Text>
+            )}
           </View>
         ) : (
-          /* Queue Position Card - UPDATED */
+          /* Queue Position Card */
           <View style={styles.positionCard}>
             <View style={styles.positionHeader}>
               <Icon name="list-outline" size={24} color="#FFD700" />
@@ -229,7 +349,7 @@ const CustomerQueueScreen = ({ navigation }) => {
           </View>
         )}
 
-        {/* Current Queue Section - UPDATED */}
+        {/* Current Queue Section */}
         <View style={styles.queueSection}>
           <View style={styles.queueHeader}>
             <Text style={styles.queueTitle}>Current Queue</Text>
@@ -315,10 +435,21 @@ const CustomerQueueScreen = ({ navigation }) => {
   );
 };
 
+// Add missing styles - add this to your existing styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#1a1a1a',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: '#fff',
+    marginTop: 10,
+    fontSize: 16,
   },
   header: {
     flexDirection: 'row',
@@ -440,10 +571,19 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     width: '100%',
   },
+  disabledButton: {
+    backgroundColor: '#666',
+  },
   checkInButtonText: {
     color: '#1a1a1a',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  warningText: {
+    color: '#FF9800',
+    fontSize: 12,
+    marginTop: 10,
+    textAlign: 'center',
   },
   positionCard: {
     backgroundColor: '#252525',

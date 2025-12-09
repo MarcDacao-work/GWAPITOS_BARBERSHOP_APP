@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,20 +6,136 @@ import {
   TouchableOpacity,
   ScrollView,
   SafeAreaView,
-  StatusBar
+  StatusBar,
+  ActivityIndicator
 } from 'react-native';
 import { Ionicons as Icon } from '@expo/vector-icons';
-import { mockBarbers, mockServices, mockTimeSlots } from '../utils/mockData';
+import { mockServices, mockTimeSlots } from '../utils/mockData';
 import { getNextAppointmentNumber, addAppointment } from '../utils/appointmentsStore';
+import { supabase } from '../services/supabase';
+
 const BookAppointmentScreen = ({ navigation }) => {
   const [selectedBarber, setSelectedBarber] = useState(null);
   const [selectedServices, setSelectedServices] = useState([]);
   const [selectedDate, setSelectedDate] = useState('Today');
   const [selectedTime, setSelectedTime] = useState(null);
+  const [barbers, setBarbers] = useState([]);
+  const [loadingBarbers, setLoadingBarbers] = useState(true);
+  const [currentUserName, setCurrentUserName] = useState('');
 
   const dates = ['Today', 'Tomorrow', 'Dec 15', 'Dec 16', 'Dec 17'];
 
-  // Toggle service selection
+  useEffect(() => {
+    fetchCurrentUser();
+    fetchRealBarbers();
+  }, []);
+
+  const fetchCurrentUser = async () => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('auth_id', user.id)
+        .single();
+      
+      console.log('👤 Current user profile:', profile);
+      
+      if (profile?.full_name) {
+        setCurrentUserName(profile.full_name);
+      } else {
+        // Fallback to email name
+        const emailName = user.email?.split('@')[0] || 'Customer';
+        setCurrentUserName(emailName);
+        console.log('⚠️ Using email name fallback:', emailName);
+      }
+    }
+  } catch (error) {
+    console.log('❌ Error fetching user:', error);
+    setCurrentUserName('Customer');
+  }
+};
+
+  const fetchRealBarbers = async () => {
+    try {
+      setLoadingBarbers(true);
+      
+      const { data: barberProfiles, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', 'barber');
+      
+      if (error) throw error;
+      
+      if (barberProfiles && barberProfiles.length > 0) {
+        const transformedBarbers = barberProfiles.map((barber, index) => ({
+          id: barber.auth_id || barber.id || `barber-${index}`,
+          name: barber.full_name || barber.email?.split('@')[0] || 'Barber',
+          title: barber.specialization ? `${barber.specialization} Specialist` : 'Professional Barber',
+          specialty: barber.specialization || 'Haircut',
+          rating: 4.5,
+          reviews: 0,
+          experience: barber.years_experience ? `${barber.years_experience} years` : 'Experienced',
+          bio: barber.bio || `Professional barber specializing in ${barber.specialization || 'haircuts'}`,
+          services: ['Haircut', 'Beard Trim', 'Styling'],
+          priceRange: '$20-$35',
+          available: true,
+          todaySlots: 3,
+          nextAvailable: 'Today, 2:00 PM',
+          imageColor: ['#2196F3', '#FF4081', '#4CAF50', '#FF9800', '#9C27B0'][index % 5]
+        }));
+        
+        setBarbers(transformedBarbers);
+      } else {
+        setBarbers([
+          {
+            id: '1',
+            name: 'Kikibon',
+            title: 'Fade Master',
+            specialty: 'Modern Fades',
+            rating: 4.8,
+            experience: '5 years',
+            imageColor: '#2196F3'
+          },
+          {
+            id: '2',
+            name: 'Jayson',
+            title: 'Classic Barber',
+            specialty: 'Traditional Cuts',
+            rating: 4.9,
+            experience: '7 years',
+            imageColor: '#FF4081'
+          }
+        ]);
+      }
+    } catch (error) {
+      console.error('Error fetching barbers:', error);
+      setBarbers([
+        {
+          id: 'fallback-1',
+          name: 'Barber 1',
+          title: 'Professional',
+          specialty: 'Haircuts',
+          rating: 4.5,
+          experience: 'Experienced',
+          imageColor: '#2196F3'
+        },
+        {
+          id: 'fallback-2',
+          name: 'Barber 2',
+          title: 'Professional',
+          specialty: 'Styling',
+          rating: 4.5,
+          experience: 'Experienced',
+          imageColor: '#4CAF50'
+        }
+      ]);
+    } finally {
+      setLoadingBarbers(false);
+    }
+  };
+
   const toggleService = (service) => {
     setSelectedServices(prev => {
       const exists = prev.find(s => s.id === service.id);
@@ -31,12 +147,11 @@ const BookAppointmentScreen = ({ navigation }) => {
     });
   };
 
-  // Calculate total price
+  // ADD THESE MISSING FUNCTIONS:
   const calculateTotal = () => {
     return selectedServices.reduce((total, service) => total + service.price, 0);
   };
 
-  // Calculate total duration
   const calculateTotalDuration = () => {
     const totalMinutes = selectedServices.reduce((total, service) => {
       const minutes = parseInt(service.duration.split(' ')[0]);
@@ -59,39 +174,55 @@ const BookAppointmentScreen = ({ navigation }) => {
   }
   
   try {
-    // Get sequential appointment number
     const appointmentNumber = await getNextAppointmentNumber();
+    const totalPrice = calculateTotal();
+    const totalDuration = calculateTotalDuration();
     
     const appointmentData = {
       id: `APPT-${appointmentNumber}`,
       appointmentNumber: appointmentNumber,
-      barber: selectedBarber,
-      services: selectedServices,
+      barber: {
+        id: selectedBarber.id,
+        name: selectedBarber.name,
+        specialty: selectedBarber.specialty,
+        rating: selectedBarber.rating
+      },
+      customerName: currentUserName, // This needs to be the customer's actual name
+      services: selectedServices.map(service => ({
+        name: service.name,
+        price: service.price,
+        duration: service.duration
+      })),
       date: selectedDate,
       time: selectedTime,
-      totalPrice: calculateTotal(),
-      totalDuration: calculateTotalDuration(),
+      totalPrice: totalPrice,
+      totalDuration: totalDuration,
       status: 'confirmed',
-      customerName: 'You', // You should get this from user profile
       createdAt: new Date().toISOString()
     };
     
-    // Save appointment to storage
-    await addAppointment(appointmentData); // This line needs the import fix
+    console.log('📋 Saving appointment:', {
+      customerName: currentUserName,
+      appointmentData: appointmentData
+    });
+    
+    await addAppointment(appointmentData);
+    
+    console.log('✅ Appointment saved successfully');
     
     navigation.navigate('AppointmentConfirmation', { 
       appointment: appointmentData 
     });
   } catch (error) {
-    console.error('Error saving appointment:', error);
+    console.error('❌ Error saving appointment:', error);
     alert('Failed to save appointment');
   }
 };
+  // COMPLETE RETURN STATEMENT WITH ALL SECTIONS:
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#1a1a1a" />
       
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity 
           style={styles.backButton}
@@ -129,38 +260,55 @@ const BookAppointmentScreen = ({ navigation }) => {
         {/* Choose Barber Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Choose Your Barber</Text>
-          <Text style={styles.sectionSubtitle}>Select from our top-rated professionals</Text>
+          <Text style={styles.sectionSubtitle}>
+            {barbers.length} professional barbers available
+          </Text>
           
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.barberScroll}>
-            {mockBarbers.map((barber) => (
-              <TouchableOpacity
-                key={barber.id}
-                style={[
-                  styles.barberCard,
-                  selectedBarber?.id === barber.id && styles.selectedBarberCard
-                ]}
-                onPress={() => setSelectedBarber(barber)}
-              >
-                <View style={[styles.barberIcon, { backgroundColor: barber.imageColor }]}>
-                  <Icon name="person" size={40} color="#fff" />
-                </View>
-                <Text style={styles.barberName}>{barber.name}</Text>
-                <Text style={styles.barberSpecialty}>{barber.specialty}</Text>
-                <View style={styles.ratingContainer}>
-                  <Icon name="star" size={14} color="#FFD700" />
-                  <Text style={styles.ratingText}>{barber.rating}</Text>
-                </View>
-                {selectedBarber?.id === barber.id && (
-                  <View style={styles.selectedIndicator}>
-                    <Icon name="checkmark-circle" size={20} color="#4CAF50" />
+          {loadingBarbers ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#FFD700" />
+              <Text style={styles.loadingText}>Loading barbers...</Text>
+            </View>
+          ) : barbers.length === 0 ? (
+            <View style={styles.noBarbersContainer}>
+              <Icon name="people-outline" size={50} color="#666" />
+              <Text style={styles.noBarbersText}>No barbers available</Text>
+              <Text style={styles.noBarbersSubtext}>
+                Barbers will appear here once they register
+              </Text>
+            </View>
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.barberScroll}>
+              {barbers.map((barber) => (
+                <TouchableOpacity
+                  key={barber.id}
+                  style={[
+                    styles.barberCard,
+                    selectedBarber?.id === barber.id && styles.selectedBarberCard
+                  ]}
+                  onPress={() => setSelectedBarber(barber)}
+                >
+                  <View style={[styles.barberIcon, { backgroundColor: barber.imageColor }]}>
+                    <Icon name="person" size={40} color="#fff" />
                   </View>
-                )}
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+                  <Text style={styles.barberName}>{barber.name}</Text>
+                  <Text style={styles.barberSpecialty}>{barber.specialty}</Text>
+                  <View style={styles.ratingContainer}>
+                    <Icon name="star" size={14} color="#FFD700" />
+                    <Text style={styles.ratingText}>{barber.rating}</Text>
+                  </View>
+                  {selectedBarber?.id === barber.id && (
+                    <View style={styles.selectedIndicator}>
+                      <Icon name="checkmark-circle" size={20} color="#4CAF50" />
+                    </View>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
         </View>
 
-        {/* Choose Service Section - RESTORED ORIGINAL DESIGN WITH MULTIPLE SELECTION */}
+        {/* Choose Service Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Select Services</Text>
@@ -223,7 +371,6 @@ const BookAppointmentScreen = ({ navigation }) => {
             })}
           </View>
           
-          {/* Selected Services Summary - Minimal Design */}
           {selectedServices.length > 0 && (
             <View style={styles.servicesSummary}>
               <Text style={styles.summaryLabel}>Selected:</Text>
@@ -752,6 +899,32 @@ const styles = StyleSheet.create({
   },
   spacer: {
     height: 40,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    padding: 40,
+  },
+  loadingText: {
+    color: '#888',
+    marginTop: 10,
+  },
+  noBarbersContainer: {
+    alignItems: 'center',
+    padding: 40,
+    backgroundColor: '#252525',
+    borderRadius: 12,
+  },
+  noBarbersText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 15,
+  },
+  noBarbersSubtext: {
+    color: '#888',
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 5,
   },
 });
 

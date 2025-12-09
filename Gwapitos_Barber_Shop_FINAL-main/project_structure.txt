@@ -1,6 +1,6 @@
---
-```plaintext
-GWAPITOS_BARBER_SHOP/
+barber-app/
+├── .expo/
+├── .vscode/
 ├── .gitignore
 ├── 2days_development.txt
 ├── App.js
@@ -9,57 +9,44 @@ GWAPITOS_BARBER_SHOP/
 ├── package.json
 ├── package-lock.json
 ├── project_structure.txt
-├── supabase_structure.txt
+│
 ├── assets/
-│   ├── adaptive-icon.png
-│   ├── favicon.png
-│   ├── icon.png
-│   └── splash-icon.png
-├── node_modules/ (not listed)
+│
+├── node_modules/
+│
 └── src/
-	├── components/
-	│   └── (empty)
-	├── navigation/
-	│   ├── AuthNavigator.js
-	│   └── MainNavigator.js
-	├── screens/
-	│   ├── WelcomeScreen.js
-	│   ├── SignInScreen.js
-	│   ├── RoleSelectionScreen.js
-	│   ├── HomeScreen.js
-	│   ├── DebugScreen.js
-	│   ├── CustomerSignupScreen.js
-	│   ├── CustomerHomeScreen.js
-	│   ├── BarberSignupScreen.js
-	│   ├── BarberHomeScreen.js
-	│   ├── CustomerQueueScreen.js
-	│   ├── BookAppointmentScreen.js
-	│   ├── AppointmentConfirmationScreen.js
-	│   ├── PaymentScreen.js
-	│   ├── QueueDisplayScreen.js
-	│   └── BarberControlPanel.js
-	├── services/
-	│   └── supabase.js
-	└── utils/
-		├── errorStore.js
-		├── mockAppointments.js
-		├── mockBarbers.js
-		└── mockData.js
-
-Notes:
-- `node_modules/` exists locally but is not tracked in source control.
-- `project_structure.txt` now reflects the files discovered in the workspace.
-
----
-### ✅ Achievements Today (summary)
-
-- 🔧 Booking UI: `src/screens/BookAppointmentScreen.js` — barber/service/date/time selection + confirmation flow.
-- 🆗 Appointment Confirmation + QR: `src/screens/AppointmentConfirmationScreen.js` — generates QR and allows sharing.
-- 🎛 Barber Control Panel: `src/screens/BarberControlPanel.js` — Call Next / Complete / Break / Emergency + local queue handling.
-- 📺 Queue Display: `src/screens/QueueDisplayScreen.js` — public display simulation with auto-refresh.
-- 🧾 Payment (mock): `src/screens/PaymentScreen.js` — mark-as-paid toggle, receipt and tip handling.
-- ⚙️ Supabase client present: `src/services/supabase.js` — ready for integration.
-- 📱 QR Scanner scaffold: `src/screens/QRScannerScreen.js` — placeholder ready for `expo-barcode-scanner` integration.
-
-Notes: Many flows are currently wired to mock data (`src/utils/mockData.js`). To make them production-ready, integrate Supabase for persistence and realtime updates, and add scanner permissions & validation.
-```
+    ├── navigation/
+    │   ├── AuthNavigator.js
+    │   ├── MainNavigator.js
+    │   └── RootNavigation.js
+    │
+    ├── screens/
+    │   ├── AppointmentConfirmScreen.js
+    │   ├── BarberControlPanel.js
+    │   ├── BarberHomeScreen.js
+    │   ├── BarberScheduledScreen.js
+    │   ├── BarberSignupScreen.js
+    │   ├── BookAppointmentScreen.js
+    │   ├── CustomerHomeScreen.js
+    │   ├── CustomerQueueScreen.js
+    │   ├── CustomerSignupScreen.js
+    │   ├── DebugScreen.js
+    │   ├── HomeScreen_OLD.js
+    │   ├── HomeScreen.js
+    │   ├── PaymentScreen.js
+    │   ├── QRScannerScreen.js
+    │   ├── QueueDisplayScreen.js
+    │   ├── RoleSelectionScreen.js
+    │   ├── SignInScreen.js
+    │   └── WelcomeScreen.js
+    │
+    ├── services/
+    │   ├── barbers.js
+    │   └── supabase.js
+    │
+    └── utils/
+        ├── appointmentsStore.js
+        ├── errorStore.js
+        ├── mockAppointments.js
+        ├── mockData.js
+        └── userDebug.js

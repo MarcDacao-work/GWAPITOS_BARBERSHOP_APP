@@ -267,60 +267,67 @@ const MainNavigator = () => {
   }, []);
 
 // In the fetchUserRole function, update the console.logs:
+// In MainNavigator.js - Update fetchUserRole function
 const fetchUserRole = async () => {
   try {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     
-    if (authError) {
+    if (authError || !user) {
       setUserRole('customer');
       setLoading(false);
       return;
     }
     
-    if (user) {
-      // Don't log to console in production
-      // Get user metadata
-      const metadataRole = user.user_metadata?.role;
+    console.log('👤 User authenticated:', user.email);
+    console.log('🔍 Checking user role...');
+    
+    // Check user metadata first (from signup)
+    const metadataRole = user.user_metadata?.role;
+    console.log('📝 Metadata role:', metadataRole);
+    
+    // Try to get profile from database
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role, full_name')
+      .eq('auth_id', user.id)
+      .maybeSingle();
+    
+    console.log('📋 Database profile:', profile);
+    
+    let finalRole = 'customer'; // Default fallback
+    
+    if (profile?.role) {
+      // Priority 1: Database profile role
+      finalRole = profile.role;
+    } else if (metadataRole) {
+      // Priority 2: Auth metadata role
+      finalRole = metadataRole;
       
-      // Try to get profile from database
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('auth_id', user.id)
-        .maybeSingle();
-      
-      // Decision logic
-      let finalRole = 'customer'; // Default
-      
-      if (profile?.role) {
-        finalRole = profile.role;
-      } else if (metadataRole) {
-        finalRole = metadataRole;
-        
-        // Create profile if it doesn't exist
-        try {
-          await supabase
-            .from('profiles')
-            .upsert({
-              auth_id: user.id,
-              email: user.email,
-              role: metadataRole,
-              full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User'
-            }, {
-              onConflict: 'auth_id'
-            });
-        } catch (insertErr) {
-          // Silently handle insert error
-        }
+      // Create or update profile in database
+      try {
+        await supabase
+          .from('profiles')
+          .upsert({
+            auth_id: user.id,
+            email: user.email,
+            role: metadataRole,
+            full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User'
+          }, {
+            onConflict: 'auth_id',
+            ignoreDuplicates: false
+          });
+        console.log('✅ Profile updated with role:', metadataRole);
+      } catch (insertErr) {
+        console.log('⚠️ Profile update error:', insertErr.message);
       }
-      
-      setUserRole(finalRole);
-      
-    } else {
-      setUserRole('customer');
     }
+    
+    console.log('🎯 Final determined role:', finalRole);
+    setUserRole(finalRole);
+    
   } catch (error) {
-    setUserRole('customer');
+    console.error('❌ Error in role detection:', error);
+    setUserRole('customer'); // Default to customer on error
   } finally {
     setLoading(false);
   }

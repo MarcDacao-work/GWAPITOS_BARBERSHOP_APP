@@ -2,38 +2,151 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons as Icon } from '@expo/vector-icons';
 import { supabase } from '../services/supabase';
+import { getBarberAppointments } from '../utils/appointmentsStore'; // Fix the import path
 
 const BarberHomeScreen = ({ navigation }) => {
   const [userName, setUserName] = useState('Barber');
   const [stats, setStats] = useState({
-    todayCustomers: 8,
-    inQueue: 3,
-    completed: 5,
-    rating: 4.8
+    todayCustomers: 0,
+    inQueue: 0,
+    completed: 0,
+    rating: 0
   });
 
   useEffect(() => {
     fetchUserProfile();
   }, []);
 
-  const fetchUserProfile = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('full_name')
-          .eq('auth_id', user.id) // Changed to use auth_id
-          .single();
+  // In BarberHomeScreen.js - Update fetchUserProfile function
+const fetchUserProfile = async () => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      // First check user_metadata (from signup)
+      const metadataName = user.user_metadata?.full_name;
+      
+      // Then try to get from profiles table
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('full_name, specialization, years_experience, bio')
+        .eq('auth_id', user.id)
+        .single();
+      
+      // Use database name first, then metadata, then email
+      let nameToDisplay = 'Barber';
+      
+      if (profile?.full_name) {
+        nameToDisplay = profile.full_name;
+      } else if (metadataName) {
+        nameToDisplay = metadataName;
         
-        if (profile?.full_name) setUserName(profile.full_name);
+        // Update profile if name exists in metadata but not in database
+        if (!profile?.full_name) {
+          await supabase
+            .from('profiles')
+            .upsert({
+              auth_id: user.id,
+              full_name: metadataName,
+              email: user.email,
+              role: 'barber'
+            }, {
+              onConflict: 'auth_id'
+            });
+        }
+      } else {
+        // Fallback to email name
+        nameToDisplay = user.email?.split('@')[0] || 'Barber';
       }
-    } catch (error) {
-      console.log('Error:', error);
+      
+      setUserName(nameToDisplay);
+      console.log('✅ Barber name set to:', nameToDisplay);
+      
+      // Load appointments for THIS barber
+      const barberAppointments = await getBarberAppointments(nameToDisplay);
+      const todayApps = barberAppointments.filter(app => app.date === 'Today');
+      setTodayAppointments(todayApps);
+      
+      // Calculate REAL stats
+      const todayCount = todayApps.length;
+      const upcomingCount = barberAppointments.filter(a => 
+        a.status === 'confirmed' || a.status === 'upcoming'
+      ).length;
+      const completedCount = barberAppointments.filter(a => 
+        a.status === 'completed'
+      ).length;
+      
+      // Update stats based on REAL data
+      setStats({
+        todayCustomers: todayCount,
+        inQueue: upcomingCount,
+        completed: completedCount,
+        rating: 0
+      });
     }
-  };
+  } catch (error) {
+    console.log('Error fetching barber profile:', error);
+    // Set a default name from email
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.email) {
+      setUserName(user.email.split('@')[0] || 'Barber');
+    }
+  }
+};
 
   const [todayAppointments, setTodayAppointments] = useState([]);
+
+useEffect(() => {
+  fetchBarberProfile();
+}, []);
+
+// In BarberHomeScreen.js - Update fetchBarberProfile and loadTodayAppointments
+const fetchBarberProfile = async () => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name, specialization, years_experience, bio')
+        .eq('auth_id', user.id)
+        .single();
+      
+      if (profile?.full_name) {
+        setUserName(profile.full_name);
+        
+        // Load appointments for THIS barber
+        const barberAppointments = await getBarberAppointments(profile.full_name);
+        const todayApps = barberAppointments.filter(app => app.date === 'Today');
+        setTodayAppointments(todayApps);
+        
+        // Calculate REAL stats
+        const todayCount = todayApps.length;
+        const upcomingCount = barberAppointments.filter(a => 
+          a.status === 'confirmed' || a.status === 'upcoming'
+        ).length;
+        const completedCount = barberAppointments.filter(a => 
+          a.status === 'completed'
+        ).length;
+        
+        // Update stats based on REAL data
+        setStats({
+          todayCustomers: todayCount,
+          inQueue: upcomingCount,
+          completed: completedCount,
+          rating: 0 // Start at 0 for new barbers
+        });
+        
+        console.log('📊 Real stats loaded:', {
+          today: todayCount,
+          upcoming: upcomingCount,
+          completed: completedCount,
+          total: barberAppointments.length
+        });
+      }
+    }
+  } catch (error) {
+    console.log('Error fetching barber profile:', error);
+  }
+};
 
 useEffect(() => {
   loadTodayAppointments();
@@ -41,17 +154,59 @@ useEffect(() => {
 
 const loadTodayAppointments = async () => {
   try {
-    const barberAppointments = await getBarberAppointments('Tony Styles');
-    const todayApps = barberAppointments.filter(app => app.date === 'Today');
-    setTodayAppointments(todayApps);
+    // Get current barber's name
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('auth_id', user.id)
+        .single();
+      
+      if (profile?.full_name) {
+        const barberAppointments = await getBarberAppointments(profile.full_name);
+        const todayApps = barberAppointments.filter(app => app.date === 'Today');
+        setTodayAppointments(todayApps);
+      }
+    }
   } catch (error) {
     console.error('Error loading appointments:', error);
   }
 };
-
   const handleLogout = async () => {
     await supabase.auth.signOut();
   };
+  // Add this function to BarberHomeScreen.js
+const clearFakeData = async () => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('auth_id', user.id)
+        .single();
+      
+      if (profile?.full_name) {
+        const appointments = await getBarberAppointments(profile.full_name);
+        console.log('📋 Current appointments:', appointments.length);
+        
+        // If you want to clear all appointments for debugging:
+        // await AsyncStorage.removeItem('user_appointments');
+        // console.log('🧹 Cleared all appointments');
+      }
+    }
+  } catch (error) {
+    console.log('Error clearing data:', error);
+  }
+};
+
+// Call it in useEffect if needed
+useEffect(() => {
+  fetchUserProfile();
+  // Optional: Uncomment to clear fake data on first load
+  // clearFakeData();
+}, []);
 
   return (
     <ScrollView style={styles.container}>
@@ -92,25 +247,29 @@ const loadTodayAppointments = async () => {
       </View>
 
       {/* Main Actions */}
-      <View style={styles.mainActions}>
-        <TouchableOpacity 
-          style={[styles.mainAction, { backgroundColor: '#2196F3' }]}
-          onPress={() => navigation.navigate('Queue')}
-        >
-          <Icon name="list" size={30} color="#fff" />
-          <Text style={styles.mainActionText}>Manage Queue</Text>
-          <Text style={styles.mainActionSubtext}>{stats.inQueue} waiting</Text>
-        </TouchableOpacity>
+<View style={styles.mainActions}>
+  <TouchableOpacity 
+    style={[styles.mainAction, { backgroundColor: '#2196F3' }]}
+    onPress={() => navigation.navigate('Queue')}
+  >
+    <Icon name="list" size={30} color="#fff" />
+    <Text style={styles.mainActionText}>Manage Queue</Text>
+    <Text style={styles.mainActionSubtext}>
+      {stats.inQueue} {stats.inQueue === 1 ? 'customer' : 'customers'} waiting
+    </Text>
+  </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={[styles.mainAction, { backgroundColor: '#4CAF50' }]}
-          onPress={() => navigation.navigate('Schedule')}
-        >
-          <Icon name="calendar" size={30} color="#fff" />
-          <Text style={styles.mainActionText}>View Schedule</Text>
-          <Text style={styles.mainActionSubtext}>Today's appointments</Text>
-        </TouchableOpacity>
-      </View>
+  <TouchableOpacity 
+    style={[styles.mainAction, { backgroundColor: '#4CAF50' }]}
+    onPress={() => navigation.navigate('Schedule')}
+  >
+    <Icon name="calendar" size={30} color="#fff" />
+    <Text style={styles.mainActionText}>View Schedule</Text>
+    <Text style={styles.mainActionSubtext}>
+      {stats.todayCustomers} {stats.todayCustomers === 1 ? 'appointment' : 'appointments'} today
+    </Text>
+  </TouchableOpacity>
+</View>
 
       {/* Quick Actions */}
       <Text style={styles.sectionTitle}>Quick Actions</Text>
@@ -155,26 +314,45 @@ const loadTodayAppointments = async () => {
           <Text style={styles.actionCardText}>Analytics</Text>
         </TouchableOpacity>
       </View>
-
-      {/* Next Customer */}
-      <Text style={styles.sectionTitle}>Next Customer</Text>
-      <View style={styles.nextCustomerCard}>
-        <View style={styles.customerAvatar}>
-          <Icon name="person" size={40} color="#FFD700" />
-        </View>
-        <View style={styles.customerInfo}>
-          <Text style={styles.customerName}>Michael Jordan</Text>
-          <Text style={styles.customerService}>Haircut & Styling</Text>
-          <View style={styles.customerDetails}>
-            <Icon name="time" size={16} color="#4CAF50" />
-            <Text style={styles.customerTime}>In 15 minutes</Text>
-          </View>
-        </View>
-        <TouchableOpacity style={styles.startButton}>
-          <Text style={styles.startButtonText}>START</Text>
-        </TouchableOpacity>
+     {/* Next Customer - Only show if there are upcoming appointments */}
+{todayAppointments.length > 0 ? (
+  <>
+    <Text style={styles.sectionTitle}>Next Customer</Text>
+    <View style={styles.nextCustomerCard}>
+      <View style={styles.customerAvatar}>
+        <Icon name="person" size={40} color="#FFD700" />
       </View>
-
+      <View style={styles.customerInfo}>
+        <Text style={styles.customerName}>
+          {todayAppointments[0].customerName || 'Customer'}
+        </Text>
+        <Text style={styles.customerService}>
+          {todayAppointments[0].services?.[0]?.name || 
+           todayAppointments[0].service || 
+           'Haircut'}
+        </Text>
+        <View style={styles.customerDetails}>
+          <Icon name="time" size={16} color="#4CAF50" />
+          <Text style={styles.customerTime}>
+            {todayAppointments[0].time || 'Today'}
+          </Text>
+        </View>
+      </View>
+      <TouchableOpacity style={styles.startButton}>
+        <Text style={styles.startButtonText}>START</Text>
+      </TouchableOpacity>
+    </View>
+  </>
+) : (
+  // Show empty state when no appointments
+  <View style={styles.emptyNextCustomer}>
+    <Icon name="people-outline" size={50} color="#666" />
+    <Text style={styles.emptyNextCustomerText}>No customers scheduled</Text>
+    <Text style={styles.emptyNextCustomerSubtext}>
+      New appointments will appear here when customers book with you
+    </Text>
+  </View>
+)}
       {/* Today's Appointments */}
       <Text style={styles.sectionTitle}>Today's Appointments</Text>
       {todayAppointments.length === 0 ? (
@@ -415,6 +593,46 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
   },
+  // Add these styles to the StyleSheet
+emptyNextCustomer: {
+  alignItems: 'center',
+  padding: 30,
+  backgroundColor: '#2d2d2d',
+  borderRadius: 15,
+  marginBottom: 30,
+},
+emptyNextCustomerText: {
+  color: '#fff',
+  fontSize: 16,
+  fontWeight: '600',
+  marginTop: 15,
+},
+emptyNextCustomerSubtext: {
+  color: '#888',
+  fontSize: 14,
+  textAlign: 'center',
+  marginTop: 5,
+  lineHeight: 20,
+},
+emptyAppointmentsCard: {
+  alignItems: 'center',
+  padding: 40,
+  backgroundColor: '#2d2d2d',
+  borderRadius: 12,
+},
+emptyAppointmentsText: {
+  color: '#fff',
+  fontSize: 16,
+  fontWeight: '600',
+  marginTop: 15,
+},
+emptyAppointmentsSubtext: {
+  color: '#888',
+  fontSize: 14,
+  textAlign: 'center',
+  marginTop: 5,
+  lineHeight: 20,
+},
 });
 
 export default BarberHomeScreen;

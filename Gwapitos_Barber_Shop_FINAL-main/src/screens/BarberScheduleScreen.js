@@ -22,20 +22,30 @@ const BarberScheduleScreen = ({ navigation }) => {
   }, []);
 
   const loadAppointments = async () => {
-    try {
-      // Seed sample data if empty
-      await seedSampleData();
+  try {
+    // REMOVE: await seedSampleData(); // Don't auto-seed for barbers
+    
+    // Get current barber's name
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('auth_id', user.id)
+        .single();
       
-      // Load appointments for barber (using the first barber from mock data)
-      const barberAppointments = await getBarberAppointments('Tony Styles');
-      setAppointments(barberAppointments);
-    } catch (error) {
-      console.error('Error loading appointments:', error);
-    } finally {
-      setLoading(false);
+      if (profile?.full_name) {
+        // Only load appointments for this specific barber
+        const barberAppointments = await getBarberAppointments(profile.full_name);
+        setAppointments(barberAppointments);
+      }
     }
-  };
-
+  } catch (error) {
+    console.error('Error loading appointments:', error);
+  } finally {
+    setLoading(false);
+  }
+};
   const onRefresh = async () => {
     setRefreshing(true);
     await loadAppointments();

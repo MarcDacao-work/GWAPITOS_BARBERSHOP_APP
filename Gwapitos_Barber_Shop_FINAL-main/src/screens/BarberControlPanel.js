@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,16 +8,102 @@ import {
   StatusBar,
   ScrollView,
   Alert,
-  Vibration
+  Vibration,
+  ActivityIndicator
 } from 'react-native';
 import { Ionicons as Icon } from '@expo/vector-icons';
-import { mockQueue } from '../utils/mockData';
+import { supabase } from '../services/supabase';
+import { getBarberAppointments } from '../utils/appointmentsStore';
 
 const BarberControlPanel = ({ navigation }) => {
-  const [queue, setQueue] = useState(mockQueue);
+  const [queue, setQueue] = useState([]); // EMPTY ARRAY FOR NEW BARBERS
   const [isOnBreak, setIsOnBreak] = useState(false);
-  const [currentCustomer, setCurrentCustomer] = useState(queue[0]);
+  const [currentCustomer, setCurrentCustomer] = useState(null);
   const [stationStatus, setStationStatus] = useState('active');
+  const [loading, setLoading] = useState(true);
+  const [barberName, setBarberName] = useState('');
+
+  useEffect(() => {
+    loadBarberQueue();
+  }, []);
+
+  const loadBarberQueue = async () => {
+    try {
+      setLoading(true);
+      
+      // Get current barber's info
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('auth_id', user.id)
+          .single();
+        
+        if (profile?.full_name) {
+          setBarberName(profile.full_name);
+          
+          // Get this barber's appointments
+          const barberAppointments = await getBarberAppointments(profile.full_name);
+          
+          // Transform appointments into queue format
+          const transformedQueue = transformAppointmentsToQueue(barberAppointments);
+          setQueue(transformedQueue);
+          
+          // Set current customer (first in queue)
+          if (transformedQueue.length > 0) {
+            setCurrentCustomer(transformedQueue[0]);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error loading queue:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const transformAppointmentsToQueue = (appointments) => {
+    if (!appointments || appointments.length === 0) {
+      return []; // Return empty array for new barbers
+    }
+    
+    // Filter today's appointments that are not completed
+    const todayAppointments = appointments.filter(app => 
+      (app.date === 'Today' || app.date === 'Now') && 
+      app.status !== 'completed'
+    );
+    
+    // Sort by time and create queue items
+    return todayAppointments
+      .sort((a, b) => {
+        // Simple time sorting
+        const timeA = a.time || '00:00';
+        const timeB = b.time || '00:00';
+        return timeA.localeCompare(timeB);
+      })
+      .map((app, index) => ({
+        id: app.id || `appt-${index}`,
+        customerName: app.customerName || 'Customer',
+        service: app.services?.[0]?.name || app.service || 'Haircut',
+        position: index + 1,
+        waitTime: calculateWaitTime(index),
+        status: index === 0 ? 'now serving' : 'waiting'
+      }));
+  };
+
+  const calculateWaitTime = (position) => {
+    const minutesPerCustomer = 15;
+    const minutes = position * minutesPerCustomer;
+    
+    if (minutes < 60) {
+      return `${minutes} min`;
+    } else {
+      const hours = Math.floor(minutes / 60);
+      const remainingMinutes = minutes % 60;
+      return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+    }
+  };
 
   const handleCallNext = () => {
     if (queue.length > 1) {
@@ -96,7 +182,7 @@ const BarberControlPanel = ({ navigation }) => {
 
   const handleAddToQueue = () => {
     const newCustomer = {
-      id: (queue.length + 1).toString(),
+      id: `walkin-${Date.now()}`,
       customerName: 'Walk-in Customer',
       service: 'Haircut',
       position: queue.length + 1,
@@ -105,6 +191,12 @@ const BarberControlPanel = ({ navigation }) => {
     };
     
     setQueue([...queue, newCustomer]);
+    
+    // If this is the first customer, set them as current
+    if (queue.length === 0) {
+      setCurrentCustomer({ ...newCustomer, status: 'now serving' });
+    }
+    
     Alert.alert('Added', 'Walk-in customer added to queue');
   };
 
@@ -116,6 +208,18 @@ const BarberControlPanel = ({ navigation }) => {
       default: return '#FF9800';
     }
   };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" backgroundColor="#1a1a1a" />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#FFD700" />
+          <Text style={styles.loadingText}>Loading control panel...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -150,7 +254,7 @@ const BarberControlPanel = ({ navigation }) => {
                 {stationStatus === 'active' ? 'ACTIVE' : stationStatus === 'break' ? 'ON BREAK' : 'EMERGENCY'}
               </Text>
             </View>
-            <Text style={styles.stationTitle}>Station #1</Text>
+            <Text style={styles.stationTitle}>Station: {barberName || 'Barber'}</Text>
           </View>
           
           <View style={styles.stationStats}>
@@ -160,7 +264,7 @@ const BarberControlPanel = ({ navigation }) => {
             </View>
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>
-                {queue.find(c => c.status === 'now serving')?.position || '0'}
+                {currentCustomer ? currentCustomer.position : '0'}
               </Text>
               <Text style={styles.statLabel}>Now Serving</Text>
             </View>
@@ -173,8 +277,8 @@ const BarberControlPanel = ({ navigation }) => {
           </View>
         </View>
 
-        {/* Current Customer */}
-        {currentCustomer && (
+        {/* Current Customer - Only show if there is one */}
+        {currentCustomer ? (
           <View style={styles.currentCustomerCard}>
             <Text style={styles.sectionTitle}>Now Serving</Text>
             <View style={styles.customerInfo}>
@@ -194,6 +298,14 @@ const BarberControlPanel = ({ navigation }) => {
                 <Text style={styles.timerText}>15:00</Text>
               </View>
             </View>
+          </View>
+        ) : (
+          <View style={styles.noCustomerCard}>
+            <Icon name="people-outline" size={50} color="#666" />
+            <Text style={styles.noCustomerText}>No customers in queue</Text>
+            <Text style={styles.noCustomerSubtext}>
+              Add walk-in customers or wait for appointments
+            </Text>
           </View>
         )}
 
@@ -249,7 +361,7 @@ const BarberControlPanel = ({ navigation }) => {
             <Text style={styles.sectionTitle}>Queue ({queue.length})</Text>
             <TouchableOpacity style={styles.addButton} onPress={handleAddToQueue}>
               <Icon name="add-circle-outline" size={20} color="#FFD700" />
-              <Text style={styles.addButtonText}>Add</Text>
+              <Text style={styles.addButtonText}>Add Walk-in</Text>
             </TouchableOpacity>
           </View>
           
@@ -257,6 +369,9 @@ const BarberControlPanel = ({ navigation }) => {
             <View style={styles.emptyQueue}>
               <Icon name="people-outline" size={50} color="#333" />
               <Text style={styles.emptyQueueText}>No customers in queue</Text>
+              <Text style={styles.emptyQueueSubtext}>
+                Add walk-in customers or wait for appointments
+              </Text>
             </View>
           ) : (
             queue.map((customer, index) => (
@@ -306,14 +421,20 @@ const BarberControlPanel = ({ navigation }) => {
           
           <TouchableOpacity 
             style={styles.additionalButton}
-            onPress={() => navigation.navigate('Payment', {
-              appointment: {
-                barberName: currentCustomer?.customerName || 'Customer',
-                service: currentCustomer?.service || 'Haircut',
-                price: '$25',
-                status: 'completed'
+            onPress={() => {
+              if (currentCustomer) {
+                navigation.navigate('Payment', {
+                  appointment: {
+                    barberName: currentCustomer.customerName,
+                    service: currentCustomer.service,
+                    price: '$25',
+                    status: 'completed'
+                  }
+                });
+              } else {
+                Alert.alert('No Customer', 'Please add a customer first');
               }
-            })}
+            }}
           >
             <Icon name="cash-outline" size={24} color="#4CAF50" />
             <Text style={styles.additionalButtonText}>Payment</Text>
@@ -330,6 +451,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#1a1a1a',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: '#fff',
+    marginTop: 10,
+    fontSize: 16,
   },
   header: {
     flexDirection: 'row',
@@ -404,6 +535,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#888',
     marginTop: 5,
+  },
+  noCustomerCard: {
+    backgroundColor: '#252525',
+    borderRadius: 15,
+    padding: 30,
+    alignItems: 'center',
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  noCustomerText: {
+    fontSize: 20,
+    color: '#fff',
+    marginTop: 15,
+    marginBottom: 5,
+  },
+  noCustomerSubtext: {
+    fontSize: 14,
+    color: '#888',
+    textAlign: 'center',
   },
   currentCustomerCard: {
     backgroundColor: '#252525',
@@ -539,6 +690,13 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 16,
     marginTop: 15,
+  },
+  emptyQueueSubtext: {
+    color: '#666',
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 5,
+    lineHeight: 20,
   },
   queueItem: {
     flexDirection: 'row',
