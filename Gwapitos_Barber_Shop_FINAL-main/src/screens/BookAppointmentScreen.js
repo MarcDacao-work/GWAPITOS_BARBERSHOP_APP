@@ -10,33 +10,83 @@ import {
 } from 'react-native';
 import { Ionicons as Icon } from '@expo/vector-icons';
 import { mockBarbers, mockServices, mockTimeSlots } from '../utils/mockData';
-
+import { getNextAppointmentNumber, addAppointment } from '../utils/appointmentsStore';
 const BookAppointmentScreen = ({ navigation }) => {
   const [selectedBarber, setSelectedBarber] = useState(null);
-  const [selectedService, setSelectedService] = useState(null);
+  const [selectedServices, setSelectedServices] = useState([]);
   const [selectedDate, setSelectedDate] = useState('Today');
   const [selectedTime, setSelectedTime] = useState(null);
 
   const dates = ['Today', 'Tomorrow', 'Dec 15', 'Dec 16', 'Dec 17'];
 
-  const handleConfirmBooking = () => {
-    if (!selectedBarber || !selectedService || !selectedTime) {
-      alert('Please select barber, service, and time');
-      return;
-    }
-    
-    const appointmentData = {
-      barber: selectedBarber,
-      service: selectedService,
-      date: selectedDate,
-      time: selectedTime,
-      price: selectedBarber.price,
-      duration: '45 min'
-    };
-    
-    navigation.navigate('AppointmentConfirmation', { appointment: appointmentData });
+  // Toggle service selection
+  const toggleService = (service) => {
+    setSelectedServices(prev => {
+      const exists = prev.find(s => s.id === service.id);
+      if (exists) {
+        return prev.filter(s => s.id !== service.id);
+      } else {
+        return [...prev, service];
+      }
+    });
   };
 
+  // Calculate total price
+  const calculateTotal = () => {
+    return selectedServices.reduce((total, service) => total + service.price, 0);
+  };
+
+  // Calculate total duration
+  const calculateTotalDuration = () => {
+    const totalMinutes = selectedServices.reduce((total, service) => {
+      const minutes = parseInt(service.duration.split(' ')[0]);
+      return total + minutes;
+    }, 0);
+    
+    if (totalMinutes < 60) {
+      return `${totalMinutes} min`;
+    } else {
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+    }
+  };
+
+  const handleConfirmBooking = async () => {
+  if (!selectedBarber || selectedServices.length === 0 || !selectedTime) {
+    alert('Please select barber, at least one service, and time');
+    return;
+  }
+  
+  try {
+    // Get sequential appointment number
+    const appointmentNumber = await getNextAppointmentNumber();
+    
+    const appointmentData = {
+      id: `APPT-${appointmentNumber}`,
+      appointmentNumber: appointmentNumber,
+      barber: selectedBarber,
+      services: selectedServices,
+      date: selectedDate,
+      time: selectedTime,
+      totalPrice: calculateTotal(),
+      totalDuration: calculateTotalDuration(),
+      status: 'confirmed',
+      customerName: 'You', // You should get this from user profile
+      createdAt: new Date().toISOString()
+    };
+    
+    // Save appointment to storage
+    await addAppointment(appointmentData); // This line needs the import fix
+    
+    navigation.navigate('AppointmentConfirmation', { 
+      appointment: appointmentData 
+    });
+  } catch (error) {
+    console.error('Error saving appointment:', error);
+    alert('Failed to save appointment');
+  }
+};
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#1a1a1a" />
@@ -68,9 +118,9 @@ const BookAppointmentScreen = ({ navigation }) => {
             </Text>
           </View>
           <View style={styles.stepLine} />
-          <View style={[styles.step, selectedService ? styles.activeStep : styles.inactiveStep]}>
-            <Icon name="time-outline" size={20} color={selectedService ? "#1a1a1a" : "#888"} />
-            <Text style={[styles.stepText, selectedService ? styles.activeStepText : styles.inactiveStepText]}>
+          <View style={[styles.step, selectedServices.length > 0 ? styles.activeStep : styles.inactiveStep]}>
+            <Icon name="time-outline" size={20} color={selectedServices.length > 0 ? "#1a1a1a" : "#888"} />
+            <Text style={[styles.stepText, selectedServices.length > 0 ? styles.activeStepText : styles.inactiveStepText]}>
               Time
             </Text>
           </View>
@@ -110,35 +160,88 @@ const BookAppointmentScreen = ({ navigation }) => {
           </ScrollView>
         </View>
 
-        {/* Choose Service Section */}
+        {/* Choose Service Section - RESTORED ORIGINAL DESIGN WITH MULTIPLE SELECTION */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Select Service</Text>
-          <Text style={styles.sectionSubtitle}>What would you like done today?</Text>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Select Services</Text>
+            {selectedServices.length > 0 && (
+              <View style={styles.selectionBadge}>
+                <Text style={styles.selectionBadgeText}>{selectedServices.length} selected</Text>
+              </View>
+            )}
+          </View>
+          <Text style={styles.sectionSubtitle}>Choose one or more services</Text>
           
           <View style={styles.servicesGrid}>
-            {mockServices.map((service) => (
-              <TouchableOpacity
-                key={service.id}
-                style={[
-                  styles.serviceCard,
-                  selectedService?.id === service.id && styles.selectedServiceCard
-                ]}
-                onPress={() => setSelectedService(service)}
-              >
-                <View style={styles.serviceIconContainer}>
-                  <Icon name="cut-outline" size={24} color="#FFD700" />
-                </View>
-                <Text style={styles.serviceName}>{service.name}</Text>
-                <Text style={styles.serviceDuration}>{service.duration}</Text>
-                <Text style={styles.servicePrice}>{service.price}</Text>
-                {selectedService?.id === service.id && (
-                  <View style={styles.serviceSelectedIndicator}>
-                    <Icon name="checkmark" size={16} color="#fff" />
+            {mockServices.map((service) => {
+              const isSelected = selectedServices.find(s => s.id === service.id);
+              
+              return (
+                <TouchableOpacity
+                  key={service.id}
+                  style={[
+                    styles.serviceCard,
+                    isSelected && styles.selectedServiceCard
+                  ]}
+                  onPress={() => toggleService(service)}
+                >
+                  <View style={[
+                    styles.serviceIconContainer,
+                    isSelected && styles.selectedServiceIconContainer
+                  ]}>
+                    <Icon 
+                      name="cut-outline" 
+                      size={24} 
+                      color={isSelected ? "#fff" : "#FFD700"} 
+                    />
                   </View>
-                )}
-              </TouchableOpacity>
-            ))}
+                  <Text style={[
+                    styles.serviceName,
+                    isSelected && styles.selectedServiceName
+                  ]}>
+                    {service.name}
+                  </Text>
+                  <Text style={[
+                    styles.serviceDuration,
+                    isSelected && styles.selectedServiceDuration
+                  ]}>
+                    {service.duration}
+                  </Text>
+                  <Text style={[
+                    styles.servicePrice,
+                    isSelected && styles.selectedServicePrice
+                  ]}>
+                    P{service.price}
+                  </Text>
+                  {isSelected && (
+                    <View style={styles.serviceSelectedIndicator}>
+                      <Icon name="checkmark" size={16} color="#fff" />
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
           </View>
+          
+          {/* Selected Services Summary - Minimal Design */}
+          {selectedServices.length > 0 && (
+            <View style={styles.servicesSummary}>
+              <Text style={styles.summaryLabel}>Selected:</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectedScroll}>
+                {selectedServices.map((service, index) => (
+                  <View key={`${service.id}-${index}`} style={styles.selectedTag}>
+                    <Icon name="checkmark-circle" size={12} color="#4CAF50" />
+                    <Text style={styles.selectedTagText}>{service.name}</Text>
+                  </View>
+                ))}
+              </ScrollView>
+              <View style={styles.totalContainer}>
+                <Text style={styles.totalLabel}>Total:</Text>
+                <Text style={styles.totalPrice}>P{calculateTotal()}</Text>
+                <Text style={styles.totalDuration}> • {calculateTotalDuration()}</Text>
+              </View>
+            </View>
+          )}
         </View>
 
         {/* Choose Date Section */}
@@ -201,7 +304,7 @@ const BookAppointmentScreen = ({ navigation }) => {
         </View>
 
         {/* Booking Summary */}
-        {(selectedBarber || selectedService || selectedTime) && (
+        {(selectedBarber || selectedServices.length > 0 || selectedTime) && (
           <View style={styles.summaryCard}>
             <Text style={styles.summaryTitle}>Booking Summary</Text>
             <View style={styles.summaryRow}>
@@ -211,9 +314,17 @@ const BookAppointmentScreen = ({ navigation }) => {
               </Text>
             </View>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Service:</Text>
+              <Text style={styles.summaryLabel}>Services:</Text>
               <Text style={styles.summaryValue}>
-                {selectedService ? selectedService.name : 'Not selected'}
+                {selectedServices.length > 0 
+                  ? `${selectedServices.length} service${selectedServices.length > 1 ? 's' : ''}`
+                  : 'Not selected'}
+              </Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Duration:</Text>
+              <Text style={styles.summaryValue}>
+                {selectedServices.length > 0 ? calculateTotalDuration() : '0 min'}
               </Text>
             </View>
             <View style={styles.summaryRow}>
@@ -223,9 +334,9 @@ const BookAppointmentScreen = ({ navigation }) => {
               </Text>
             </View>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Price:</Text>
+              <Text style={styles.summaryLabel}>Total Price:</Text>
               <Text style={styles.summaryPrice}>
-                {selectedBarber ? selectedBarber.price : 'P0'}
+                P{calculateTotal()}
               </Text>
             </View>
           </View>
@@ -235,14 +346,14 @@ const BookAppointmentScreen = ({ navigation }) => {
         <TouchableOpacity
           style={[
             styles.confirmButton,
-            (!selectedBarber || !selectedService || !selectedTime) && styles.disabledButton
+            (!selectedBarber || selectedServices.length === 0 || !selectedTime) && styles.disabledButton
           ]}
           onPress={handleConfirmBooking}
-          disabled={!selectedBarber || !selectedService || !selectedTime}
+          disabled={!selectedBarber || selectedServices.length === 0 || !selectedTime}
         >
           <Icon name="calendar-outline" size={22} color="#fff" />
           <Text style={styles.confirmButtonText}>
-            CONFIRM BOOKING
+            CONFIRM BOOKING - P{calculateTotal()}
           </Text>
         </TouchableOpacity>
 
@@ -321,11 +432,27 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: 30,
   },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 5,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 5,
+  },
+  selectionBadge: {
+    backgroundColor: '#FFD700',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  selectionBadgeText: {
+    color: '#1a1a1a',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   sectionSubtitle: {
     fontSize: 14,
@@ -414,6 +541,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 10,
   },
+  selectedServiceIconContainer: {
+    backgroundColor: '#4CAF50',
+  },
   serviceName: {
     fontSize: 14,
     fontWeight: 'bold',
@@ -421,14 +551,23 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 5,
   },
+  selectedServiceName: {
+    color: '#fff',
+  },
   serviceDuration: {
     fontSize: 12,
     color: '#888',
     marginBottom: 5,
   },
+  selectedServiceDuration: {
+    color: '#fff',
+  },
   servicePrice: {
     fontSize: 16,
     fontWeight: 'bold',
+    color: '#FFD700',
+  },
+  selectedServicePrice: {
     color: '#FFD700',
   },
   serviceSelectedIndicator: {
@@ -441,6 +580,60 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  servicesSummary: {
+    backgroundColor: '#2d2d2d',
+    borderRadius: 10,
+    padding: 15,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  summaryLabel: {
+    fontSize: 14,
+    color: '#888',
+    marginBottom: 8,
+  },
+  selectedScroll: {
+    flexDirection: 'row',
+    marginBottom: 10,
+  },
+  selectedTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(76, 175, 80, 0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 15,
+    marginRight: 8,
+    gap: 4,
+  },
+  selectedTagText: {
+    fontSize: 12,
+    color: '#4CAF50',
+    fontWeight: '600',
+  },
+  totalContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#444',
+  },
+  totalLabel: {
+    fontSize: 16,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  totalPrice: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+  },
+  totalDuration: {
+    fontSize: 14,
+    color: '#888',
   },
   dateScroll: {
     flexDirection: 'row',

@@ -13,6 +13,7 @@ import QueueDisplayScreen from '../screens/QueueDisplayScreen';
 import CustomerQueueScreen from '../screens/CustomerQueueScreen';
 import PaymentScreen from '../screens/PaymentScreen';
 import QRScannerScreen from '../screens/QRScannerScreen';
+import BarberScheduleScreen from '../screens/BarberScheduleScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -36,7 +37,7 @@ const CustomerBookingsScreen = ({ navigation }) => (
       onPress={() => navigation.navigate('AppointmentConfirmation', {
         appointment: {
           barber: { name: 'Tony Styles' },
-          service: 'Haircut',
+          service: { name: 'Haircut' },
           date: 'Today',
           time: '3:00 PM',
           status: 'confirmed',
@@ -104,7 +105,7 @@ const BarberDashboardScreen = ({ navigation }) => <BarberHomeScreen navigation={
 
 const BarberQueueScreen = ({ navigation }) => <BarberControlPanel navigation={navigation} />;
 
-const BarberScheduleScreen = ({ navigation }) => (
+/*const BarberScheduleScreen = ({ navigation }) => (
   <View style={styles.container}>
     <Text style={styles.title}>📅 My Schedule</Text>
     <Text style={styles.subtitle}>Today's appointments</Text>
@@ -130,6 +131,7 @@ const BarberScheduleScreen = ({ navigation }) => (
     </TouchableOpacity>
   </View>
 );
+*/
 
 const BarberProfileScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -264,91 +266,74 @@ const MainNavigator = () => {
     fetchUserRole();
   }, []);
 
-  const fetchUserRole = async () => {
-    try {
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      
-      if (authError) {
-        console.log('Auth error:', authError);
-        setUserRole('customer');
-        setLoading(false);
-        return;
-      }
-      
-      if (user) {
-        console.log('Fetching role for user:', user.email, 'User ID:', user.id);
-        
-        // FIRST: Check user metadata (from signup)
-        const metadataRole = user.user_metadata?.role;
-        console.log('Metadata role:', metadataRole);
-        
-        // SECOND: Try to get profile from database
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('auth_id', user.id)
-          .maybeSingle(); // Use maybeSingle to avoid throwing error
-        
-        if (profileError) {
-          console.log('Profile query error:', profileError.message);
-        }
-        
-        console.log('Database profile role:', profile?.role);
-        
-        // DECISION LOGIC:
-        let finalRole = 'customer'; // Default
-        
-        if (profile?.role) {
-          // 1. Use database role if it exists
-          finalRole = profile.role;
-        } else if (metadataRole) {
-          // 2. Otherwise use metadata role
-          finalRole = metadataRole;
-          
-          // Create profile if it doesn't exist
-          try {
-            const { error: insertError } = await supabase
-              .from('profiles')
-              .upsert({
-                auth_id: user.id,
-                email: user.email,
-                role: metadataRole,
-                full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User'
-              }, {
-                onConflict: 'auth_id'
-              });
-            
-            if (insertError) {
-              console.log('Profile upsert error:', insertError.message);
-            }
-          } catch (insertErr) {
-            console.log('Error creating profile:', insertErr);
-          }
-        }
-        
-        console.log('Final determined role:', finalRole);
-        setUserRole(finalRole);
-        
-      } else {
-        console.log('No user found');
-        setUserRole('customer');
-      }
-    } catch (error) {
-      console.log('Error in fetchUserRole:', error);
+// In the fetchUserRole function, update the console.logs:
+const fetchUserRole = async () => {
+  try {
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError) {
       setUserRole('customer');
-    } finally {
       setLoading(false);
+      return;
     }
-  };
+    
+    if (user) {
+      // Don't log to console in production
+      // Get user metadata
+      const metadataRole = user.user_metadata?.role;
+      
+      // Try to get profile from database
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('auth_id', user.id)
+        .maybeSingle();
+      
+      // Decision logic
+      let finalRole = 'customer'; // Default
+      
+      if (profile?.role) {
+        finalRole = profile.role;
+      } else if (metadataRole) {
+        finalRole = metadataRole;
+        
+        // Create profile if it doesn't exist
+        try {
+          await supabase
+            .from('profiles')
+            .upsert({
+              auth_id: user.id,
+              email: user.email,
+              role: metadataRole,
+              full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User'
+            }, {
+              onConflict: 'auth_id'
+            });
+        } catch (insertErr) {
+          // Silently handle insert error
+        }
+      }
+      
+      setUserRole(finalRole);
+      
+    } else {
+      setUserRole('customer');
+    }
+  } catch (error) {
+    setUserRole('customer');
+  } finally {
+    setLoading(false);
+  }
+};
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#FFD700" />
-        <Text style={styles.loadingText}>Loading...</Text>
-      </View>
-    );
-  }
+     <View style={styles.loadingContainer}>
+      <ActivityIndicator size="large" color="#FFD700" />
+      <Text style={styles.loadingText}>Loading...</Text>
+     </View>
+  );
+}
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>

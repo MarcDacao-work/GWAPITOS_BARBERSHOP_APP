@@ -115,12 +115,12 @@ export const mockQueue = [
 ];
 
 export const mockServices = [
-  { id: '1', name: 'Haircut', duration: '30 min', price: 'P250' },
-  { id: '2', name: 'Beard Trim', duration: '15 min', price: 'P100' },
-  { id: '3', name: 'Haircut & Beard', duration: '45 min', price: 'P450' },
-  { id: '4', name: 'Hot Towel Shave', duration: '30 min', price: 'P350' },
-  { id: '5', name: 'Kid\'s Cut', duration: '25 min', price: 'P100' },
-  { id: '6', name: 'Design/Fade', duration: '45 min', price: 'P500' }
+  { id: '1', name: 'Haircut', duration: '30 min', price: 250 },
+  { id: '2', name: 'Beard Trim', duration: '15 min', price: 100 },
+  { id: '3', name: 'Haircut & Beard', duration: '45 min', price: 450 },
+  { id: '4', name: 'Hot Towel Shave', duration: '30 min', price: 350 },
+  { id: '5', name: 'Kid\'s Cut', duration: '25 min', price: 100 },
+  { id: '6', name: 'Design/Fade', duration: '45 min', price: 500 }
 ];
 
 export const mockTimeSlots = [

@@ -16,12 +16,15 @@ import QRCode from 'react-native-qrcode-svg';
 const AppointmentConfirmationScreen = ({ navigation, route }) => {
   const { appointment } = route.params || {
     appointment: {
-      barber: { name: 'Tony Styles', price: 'P250.00' },
-      service: { name: 'Haircut & Beard Trim' },
+      id: 'DEMO-001',
+      appointmentNumber: 1001,
+      barber: { name: 'Tony Styles' },
+      services: [{ name: 'Haircut & Beard Trim', price: 250 }],
       date: 'Today',
       time: '3:00 PM',
-      price: 'P250.00',
-      duration: '45 min'
+      totalPrice: 250,
+      totalDuration: '45 min',
+      status: 'confirmed'
     }
   };
 
@@ -31,7 +34,7 @@ const AppointmentConfirmationScreen = ({ navigation, route }) => {
   const handleShareQR = async () => {
     try {
       const result = await Share.share({
-        message: `My barbershop appointment with ${appointment.barber.name} on ${appointment.date} at ${appointment.time}. Service: ${appointment.service.name}`,
+        message: `My barbershop appointment with ${appointment.barber.name} on ${appointment.date} at ${appointment.time}. Service: ${appointment.services?.[0]?.name || 'Service'}`,
         title: 'Barbershop Appointment'
       });
     } catch (error) {
@@ -42,15 +45,14 @@ const AppointmentConfirmationScreen = ({ navigation, route }) => {
   const handleDone = () => {
     Alert.alert(
       'Appointment Confirmed!',
-      'Your appointment has been booked successfully. You can view it in "My Appointments".',
+      'Your appointment has been booked successfully. You can view it in "My Appointments" tab.',
       [
         {
-          text: 'View Appointments',
-          onPress: () => navigation.navigate('Bookings')
-        },
-        {
-          text: 'Return Home',
-          onPress: () => navigation.navigate('Home')
+          text: 'OK',
+          onPress: () => {
+            // Navigate back to main tabs
+            navigation.navigate('MainTabs');
+          }
         }
       ]
     );
@@ -120,7 +122,7 @@ const AppointmentConfirmationScreen = ({ navigation, route }) => {
             </View>
             <View style={styles.detailInfo}>
               <Text style={styles.detailLabel}>Barber</Text>
-              <Text style={styles.detailValue}>{appointment.barber.name}</Text>
+              <Text style={styles.detailValue}>{appointment.barber?.name || 'Not specified'}</Text>
             </View>
           </View>
 
@@ -129,8 +131,18 @@ const AppointmentConfirmationScreen = ({ navigation, route }) => {
               <Icon name="cut-outline" size={20} color="#FFD700" />
             </View>
             <View style={styles.detailInfo}>
-              <Text style={styles.detailLabel}>Service</Text>
-              <Text style={styles.detailValue}>{appointment.service.name}</Text>
+              <Text style={styles.detailLabel}>Services</Text>
+              {appointment.services && Array.isArray(appointment.services) ? (
+                appointment.services.map((service, index) => (
+                  <Text key={index} style={styles.detailValue}>
+                    • {service.name} - P{service.price}
+                  </Text>
+                ))
+              ) : appointment.service ? (
+                <Text style={styles.detailValue}>• {typeof appointment.service === 'string' ? appointment.service : appointment.service.name}</Text>
+              ) : (
+                <Text style={styles.detailValue}>• Service not specified</Text>
+              )}
             </View>
           </View>
 
@@ -152,7 +164,7 @@ const AppointmentConfirmationScreen = ({ navigation, route }) => {
             </View>
             <View style={styles.detailInfo}>
               <Text style={styles.detailLabel}>Duration</Text>
-              <Text style={styles.detailValue}>{appointment.duration}</Text>
+              <Text style={styles.detailValue}>{appointment.totalDuration || appointment.duration || 'N/A'}</Text>
             </View>
           </View>
 
@@ -162,7 +174,9 @@ const AppointmentConfirmationScreen = ({ navigation, route }) => {
             </View>
             <View style={styles.detailInfo}>
               <Text style={styles.detailLabel}>Total</Text>
-              <Text style={styles.detailPrice}>{appointment.price}</Text>
+              <Text style={styles.detailPrice}>
+                {appointment.totalPrice ? `P${appointment.totalPrice}` : appointment.price || 'N/A'}
+              </Text>
             </View>
           </View>
         </View>

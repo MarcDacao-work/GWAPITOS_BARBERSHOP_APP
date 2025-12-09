@@ -33,6 +33,22 @@ const BarberHomeScreen = ({ navigation }) => {
     }
   };
 
+  const [todayAppointments, setTodayAppointments] = useState([]);
+
+useEffect(() => {
+  loadTodayAppointments();
+}, []);
+
+const loadTodayAppointments = async () => {
+  try {
+    const barberAppointments = await getBarberAppointments('Tony Styles');
+    const todayApps = barberAppointments.filter(app => app.date === 'Today');
+    setTodayAppointments(todayApps);
+  } catch (error) {
+    console.error('Error loading appointments:', error);
+  }
+};
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
   };
@@ -161,26 +177,37 @@ const BarberHomeScreen = ({ navigation }) => {
 
       {/* Today's Appointments */}
       <Text style={styles.sectionTitle}>Today's Appointments</Text>
-      {['10:00 AM', '11:30 AM', '1:00 PM', '2:30 PM', '4:00 PM'].map((time, index) => (
-        <View key={index} style={styles.appointmentRow}>
-          <View style={styles.timeBadge}>
-            <Text style={styles.timeText}>{time}</Text>
+      {todayAppointments.length === 0 ? (
+        <Text style={styles.noAppointmentsText}>No appointments today</Text>
+      ) : (
+        todayAppointments.map((appointment, index) => (
+          <View key={appointment.id} style={styles.appointmentRow}>
+            <View style={styles.timeBadge}>
+              <Text style={styles.timeText}>{appointment.time}</Text>
+            </View>
+            <View style={styles.appointmentInfo}>
+              <Text style={styles.appointmentCustomer}>
+                {appointment.customerName || `Customer`}
+              </Text>
+              <Text style={styles.appointmentService}>
+                {appointment.services?.map(s => s.name).join(', ') || 'Haircut'}
+              </Text>
+            </View>
+            <View style={[
+              styles.statusBadge,
+              { 
+                backgroundColor: appointment.status === 'confirmed' ? '#FFD700' : 
+                              appointment.status === 'completed' ? '#4CAF50' : '#888' 
+              }
+            ]}>
+              <Text style={styles.statusText}>
+                {appointment.status === 'confirmed' ? 'UPCOMING' : 
+                appointment.status === 'completed' ? 'DONE' : 'PENDING'}
+              </Text>
+            </View>
           </View>
-          <View style={styles.appointmentInfo}>
-            <Text style={styles.appointmentCustomer}>Customer {index + 1}</Text>
-            <Text style={styles.appointmentService}>Haircut</Text>
-          </View>
-          <View style={[styles.statusBadge, 
-            index < 2 ? styles.statusDone : 
-            index === 2 ? styles.statusNow : 
-            styles.statusPending
-          ]}>
-            <Text style={styles.statusText}>
-              {index < 2 ? 'DONE' : index === 2 ? 'NOW' : 'UPCOMING'}
-            </Text>
-          </View>
-        </View>
-      ))}
+        ))
+      )}
     </ScrollView>
   );
 };
